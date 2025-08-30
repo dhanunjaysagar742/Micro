@@ -1,0 +1,5602 @@
+Spring Boot 3.5.5 JWT Authentication with Role-Based Access Control
+Here's a complete implementation using your role table structure:
+
+Project Structure
+text
+src/main/java/com/example/auth/
+├── config/
+│   ├── JwtAuthenticationEntryPoint.java
+│   ├── JwtRequestFilter.java
+│   └── SecurityConfig.java
+├── controller/
+│   ├── AuthController.java
+│   └── UserController.java
+├── dto/
+│   ├── JwtRequest.java
+│   ├── JwtResponse.java
+│   └── UserDetailsDto.java
+├── entity/
+│   ├── Role.java
+│   ├── UserRole.java
+│   └── User.java
+├── repository/
+│   ├── RoleRepository.java
+│   ├── UserRepository.java
+│   └── UserRoleRepository.java
+├── service/
+│   ├── JwtUserDetailsService.java
+│   ├── UserService.java
+│   └── JwtUtil.java
+└── AuthApplication.java
+Dependencies (pom.xml)
+xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.5.5</version>
+        <relativePath/>
+    </parent>
+    
+    <groupId>com.example</groupId>
+    <artifactId>jwt-auth</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <packaging>jar</packaging>
+    
+    <properties>
+        <java.version>21</java.version>
+    </properties>
+    
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>0.12.3</version>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>0.12.3</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>0.12.3</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+    </dependencies>
+</project>
+Entity Classes
+Role.java
+java
+package com.example.auth.entity;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "role")
+public class Role {
+    @Id
+    @Column(name = "role_no")
+    private Integer roleNo;
+    
+    @Column(name = "role_name", nullable = false)
+    private String roleName;
+    
+    // Constructors
+    public Role() {}
+    
+    public Role(Integer roleNo, String roleName) {
+        this.roleNo = roleNo;
+        this.roleName = roleName;
+    }
+    
+    // Getters and Setters
+    public Integer getRoleNo() { return roleNo; }
+    public void setRoleNo(Integer roleNo) { this.roleNo = roleNo; }
+    
+    public String getRoleName() { return roleName; }
+    public void setRoleName(String roleName) { this.roleName = roleName; }
+}
+UserRole.java
+java
+package com.example.auth.entity;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "user_role")
+@IdClass(UserRoleId.class)
+public class UserRole {
+    @Id
+    @Column(name = "empid")
+    private Long empId;
+    
+    @Id
+    @Column(name = "role_no")
+    private Integer roleNo;
+    
+    @Id
+    @Column(name = "directorate")
+    private String directorate;
+    
+    @Column(name = "role_name")
+    private String roleName;
+    
+    // Constructors
+    public UserRole() {}
+    
+    public UserRole(Long empId, Integer roleNo, String roleName, String directorate) {
+        this.empId = empId;
+        this.roleNo = roleNo;
+        this.roleName = roleName;
+        this.directorate = directorate;
+    }
+    
+    // Getters and Setters
+    public Long getEmpId() { return empId; }
+    public void setEmpId(Long empId) { this.empId = empId; }
+    
+    public Integer getRoleNo() { return roleNo; }
+    public void setRoleNo(Integer roleNo) { this.roleNo = roleNo; }
+    
+    public String getRoleName() { return roleName; }
+    public void setRoleName(String roleName) { this.roleName = roleName; }
+    
+    public String getDirectorate() { return directorate; }
+    public void setDirectorate(String directorate) { this.directorate = directorate; }
+}
+UserRoleId.java
+java
+package com.example.auth.entity;
+
+import java.io.Serializable;
+import java.util.Objects;
+
+public class UserRoleId implements Serializable {
+    private Long empId;
+    private Integer roleNo;
+    private String directorate;
+    
+    public UserRoleId() {}
+    
+    public UserRoleId(Long empId, Integer roleNo, String directorate) {
+        this.empId = empId;
+        this.roleNo = roleNo;
+        this.directorate = directorate;
+    }
+    
+    // Getters, setters, equals, and hashCode
+    public Long getEmpId() { return empId; }
+    public void setEmpId(Long empId) { this.empId = empId; }
+    
+    public Integer getRoleNo() { return roleNo; }
+    public void setRoleNo(Integer roleNo) { this.roleNo = roleNo; }
+    
+    public String getDirectorate() { return directorate; }
+    public void setDirectorate(String directorate) { this.directorate = directorate; }
+    
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        UserRoleId that = (UserRoleId) o;
+        return Objects.equals(empId, that.empId) && 
+               Objects.equals(roleNo, that.roleNo) && 
+               Objects.equals(directorate, that.directorate);
+    }
+    
+    @Override
+    public int hashCode() {
+        return Objects.hash(empId, roleNo, directorate);
+    }
+}
+User.java
+java
+package com.example.auth.entity;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "users")
+public class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long empId;
+    
+    @Column(unique = true, nullable = false)
+    private String username;
+    
+    @Column(nullable = false)
+    private String password;
+    
+    @Column(nullable = false)
+    private boolean enabled = true;
+    
+    // Constructors
+    public User() {}
+    
+    public User(String username, String password) {
+        this.username = username;
+        this.password = password;
+    }
+    
+    // Getters and Setters
+    public Long getEmpId() { return empId; }
+    public void setEmpId(Long empId) { this.empId = empId; }
+    
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+    
+    public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }
+    
+    public boolean isEnabled() { return enabled; }
+    public void setEnabled(boolean enabled) { this.enabled = enabled; }
+}
+Repository Interfaces
+UserRepository.java
+java
+package com.example.auth.repository;
+
+import com.example.auth.entity.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+import java.util.Optional;
+
+@Repository
+public interface UserRepository extends JpaRepository<User, Long> {
+    Optional<User> findByUsername(String username);
+}
+UserRoleRepository.java
+java
+package com.example.auth.repository;
+
+import com.example.auth.entity.UserRole;
+import com.example.auth.entity.UserRoleId;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+import java.util.List;
+
+@Repository
+public interface UserRoleRepository extends JpaRepository<UserRole, UserRoleId> {
+    List<UserRole> findByEmpId(Long empId);
+}
+RoleRepository.java
+java
+package com.example.auth.repository;
+
+import com.example.auth.entity.Role;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface RoleRepository extends JpaRepository<Role, Integer> {
+}
+JWT Utility Class
+JwtUtil.java
+java
+package com.example.auth.service;
+
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.stereotype.Component;
+
+import javax.crypto.SecretKey;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+
+@Component
+public class JwtUtil {
+    
+    @Value("${jwt.secret:mySecretKey}")
+    private String secret;
+    
+    @Value("${jwt.expiration:86400}")
+    private int jwtExpiration;
+    
+    private SecretKey getSigningKey() {
+        return Keys.hmacShaKeyFor(secret.getBytes());
+    }
+    
+    public String extractUsername(String token) {
+        return extractClaim(token, Claims::getSubject);
+    }
+    
+    public Date extractExpiration(String token) {
+        return extractClaim(token, Claims::getExpiration);
+    }
+    
+    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
+        final Claims claims = extractAllClaims(token);
+        return claimsResolver.apply(claims);
+    }
+    
+    private Claims extractAllClaims(String token) {
+        return Jwts.parser()
+                .verifyWith(getSigningKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+    }
+    
+    private Boolean isTokenExpired(String token) {
+        return extractExpiration(token).before(new Date());
+    }
+    
+    public String generateToken(UserDetails userDetails, List<String> roles, List<String> directorates) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("roles", roles);
+        claims.put("directorates", directorates);
+        return createToken(claims, userDetails.getUsername());
+    }
+    
+    private String createToken(Map<String, Object> claims, String subject) {
+        return Jwts.builder()
+                .claims(claims)
+                .subject(subject)
+                .issuedAt(new Date(System.currentTimeMillis()))
+                .expiration(new Date(System.currentTimeMillis() + jwtExpiration * 1000L))
+                .signWith(getSigningKey())
+                .compact();
+    }
+    
+    public Boolean validateToken(String token, UserDetails userDetails) {
+        final String username = extractUsername(token);
+        return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
+    }
+    
+    public List<String> extractRoles(String token) {
+        Claims claims = extractAllClaims(token);
+        return claims.get("roles", List.class);
+    }
+    
+    public List<String> extractDirectorates(String token) {
+        Claims claims = extractAllClaims(token);
+        return claims.get("directorates", List.class);
+    }
+}
+Service Classes
+JwtUserDetailsService.java
+java
+package com.example.auth.service;
+
+import com.example.auth.entity.User;
+import com.example.auth.entity.UserRole;
+import com.example.auth.repository.UserRepository;
+import com.example.auth.repository.UserRoleRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+public class JwtUserDetailsService implements UserDetailsService {
+    
+    @Autowired
+    private UserRepository userRepository;
+    
+    @Autowired
+    private UserRoleRepository userRoleRepository;
+    
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+        
+        List<UserRole> userRoles = userRoleRepository.findByEmpId(user.getEmpId());
+        List<GrantedAuthority> authorities = userRoles.stream()
+                .map(role -> new SimpleGrantedAuthority("ROLE_" + role.getRoleName()))
+                .collect(Collectors.toList());
+        
+        return new org.springframework.security.core.userdetails.User(
+                user.getUsername(), 
+                user.getPassword(), 
+                user.isEnabled(), 
+                true, 
+                true, 
+                true, 
+                authorities);
+    }
+    
+    public List<String> getUserRoles(String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+        
+        return userRoleRepository.findByEmpId(user.getEmpId())
+                .stream()
+                .map(UserRole::getRoleName)
+                .distinct()
+                .collect(Collectors.toList());
+    }
+    
+    public List<String> getUserDirectorates(String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+        
+        return userRoleRepository.findByEmpId(user.getEmpId())
+                .stream()
+                .map(UserRole::getDirectorate)
+                .distinct()
+                .collect(Collectors.toList());
+    }
+}
+Security Configuration
+SecurityConfig.java
+java
+package com.example.auth.config;
+
+import com.example.auth.service.JwtUserDetailsService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity
+public class SecurityConfig {
+    
+    @Autowired
+    private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+    
+    @Autowired
+    private JwtRequestFilter jwtRequestFilter;
+    
+    @Autowired
+    private JwtUserDetailsService jwtUserDetailsService;
+    
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+    
+    @Bean
+    public DaoAuthenticationProvider authenticationProvider() {
+        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
+        authProvider.setUserDetailsService(jwtUserDetailsService);
+        authProvider.setPasswordEncoder(passwordEncoder());
+        return authProvider;
+    }
+    
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+        return config.getAuthenticationManager();
+    }
+    
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http.csrf(csrf -> csrf.disable())
+                .authorizeHttpRequests(authz -> authz
+                        .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/api/td/**").hasRole("TD")
+                        .requestMatchers("/api/gd/**").hasRole("GD")
+                        .anyRequest().authenticated()
+                )
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
+        
+        http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
+        
+        return http.build();
+    }
+}
+JwtAuthenticationEntryPoint.java
+java
+package com.example.auth.config;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.MediaType;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.stereotype.Component;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+@Component
+public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
+    
+    @Override
+    public void commence(HttpServletRequest request, HttpServletResponse response,
+                         AuthenticationException authException) throws IOException {
+        
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        
+        final Map<String, Object> body = new HashMap<>();
+        body.put("status", HttpServletResponse.SC_UNAUTHORIZED);
+        body.put("error", "Unauthorized");
+        body.put("message", authException.getMessage());
+        body.put("path", request.getServletPath());
+        
+        final ObjectMapper mapper = new ObjectMapper();
+        mapper.writeValue(response.getOutputStream(), body);
+    }
+}
+JwtRequestFilter.java
+java
+package com.example.auth.config;
+
+import com.example.auth.service.JwtUserDetailsService;
+import com.example.auth.service.JwtUtil;
+import io.jsonwebtoken.ExpiredJwtException;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+
+@Component
+public class JwtRequestFilter extends OncePerRequestFilter {
+    
+    @Autowired
+    private JwtUserDetailsService jwtUserDetailsService;
+    
+    @Autowired
+    private JwtUtil jwtUtil;
+    
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, 
+                                    FilterChain chain) throws ServletException, IOException {
+        
+        final String requestTokenHeader = request.getHeader("Authorization");
+        
+        String username = null;
+        String jwtToken = null;
+        
+        if (requestTokenHeader != null && requestTokenHeader.startsWith("Bearer ")) {
+            jwtToken = requestTokenHeader.substring(7);
+            try {
+                username = jwtUtil.extractUsername(jwtToken);
+            } catch (IllegalArgumentException e) {
+                System.out.println("Unable to get JWT Token");
+            } catch (ExpiredJwtException e) {
+                System.out.println("JWT Token has expired");
+            }
+        }
+        
+        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            UserDetails userDetails = this.jwtUserDetailsService.loadUserByUsername(username);
+            
+            if (jwtUtil.validateToken(jwtToken, userDetails)) {
+                UsernamePasswordAuthenticationToken authToken = 
+                        new UsernamePasswordAuthenticationToken(
+                                userDetails, null, userDetails.getAuthorities());
+                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authToken);
+            }
+        }
+        chain.doFilter(request, response);
+    }
+}
+DTOs
+JwtRequest.java
+java
+package com.example.auth.dto;
+
+public class JwtRequest {
+    private String username;
+    private String password;
+    
+    public JwtRequest() {}
+    
+    public JwtRequest(String username, String password) {
+        this.username = username;
+        this.password = password;
+    }
+    
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+    
+    public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }
+}
+JwtResponse.java
+java
+package com.example.auth.dto;
+
+import java.util.List;
+
+public class JwtResponse {
+    private String token;
+    private String type = "Bearer";
+    private String username;
+    private List<String> roles;
+    private List<String> directorates;
+    
+    public JwtResponse(String token, String username, List<String> roles, List<String> directorates) {
+        this.token = token;
+        this.username = username;
+        this.roles = roles;
+        this.directorates = directorates;
+    }
+    
+    // Getters and Setters
+    public String getToken() { return token; }
+    public void setToken(String token) { this.token = token; }
+    
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
+    
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+    
+    public List<String> getRoles() { return roles; }
+    public void setRoles(List<String> roles) { this.roles = roles; }
+    
+    public List<String> getDirectorates() { return directorates; }
+    public void setDirectorates(List<String> directorates) { this.directorates = directorates; }
+}
+Controllers
+AuthController.java
+java
+package com.example.auth.controller;
+
+import com.example.auth.dto.JwtRequest;
+import com.example.auth.dto.JwtResponse;
+import com.example.auth.service.JwtUserDetailsService;
+import com.example.auth.service.JwtUtil;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/auth")
+@CrossOrigin
+public class AuthController {
+    
+    @Autowired
+    private AuthenticationManager authenticationManager;
+    
+    @Autowired
+    private JwtUtil jwtUtil;
+    
+    @Autowired
+    private JwtUserDetailsService userDetailsService;
+    
+    @PostMapping("/login")
+    public ResponseEntity<?> createAuthenticationToken(@RequestBody JwtRequest authenticationRequest) throws Exception {
+        
+        authenticate(authenticationRequest.getUsername(), authenticationRequest.getPassword());
+        
+        final UserDetails userDetails = userDetailsService
+                .loadUserByUsername(authenticationRequest.getUsername());
+        
+        final List<String> roles = userDetailsService.getUserRoles(authenticationRequest.getUsername());
+        final List<String> directorates = userDetailsService.getUserDirectorates(authenticationRequest.getUsername());
+        
+        final String token = jwtUtil.generateToken(userDetails, roles, directorates);
+        
+        return ResponseEntity.ok(new JwtResponse(token, userDetails.getUsername(), roles, directorates));
+    }
+    
+    private void authenticate(String username, String password) throws Exception {
+        try {
+            authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(username, password));
+        } catch (DisabledException e) {
+            throw new Exception("USER_DISABLED", e);
+        } catch (BadCredentialsException e) {
+            throw new Exception("INVALID_CREDENTIALS", e);
+        }
+    }
+}
+UserController.java
+java
+package com.example.auth.controller;
+
+import com.example.auth.service.JwtUtil;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api")
+@CrossOrigin
+public class UserController {
+    
+    @Autowired
+    private JwtUtil jwtUtil;
+    
+    @GetMapping("/td/dashboard")
+    @PreAuthorize("hasRole('TD')")
+    public Map<String, Object> getTdDashboard(HttpServletRequest request) {
+        String token = extractTokenFromRequest(request);
+        List<String> directorates = jwtUtil.extractDirectorates(token);
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Welcome to TD Dashboard");
+        response.put("directorates", directorates);
+        response.put("data", "TD specific data based on directorates");
+        
+        return response;
+    }
+    
+    @GetMapping("/gd/dashboard")
+    @PreAuthorize("hasRole('GD')")
+    public Map<String, Object> getGdDashboard(HttpServletRequest request) {
+        String token = extractTokenFromRequest(request);
+        List<String> directorates = jwtUtil.extractDirectorates(token);
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Welcome to GD Dashboard");
+        response.put("directorates", directorates);
+        response.put("data", "GD specific data based on directorates");
+        
+        return response;
+    }
+    
+    @GetMapping("/user/profile")
+    public Map<String, Object> getUserProfile(HttpServletRequest request) {
+        String token = extractTokenFromRequest(request);
+        String username = jwtUtil.extractUsername(token);
+        List<String> roles = jwtUtil.extractRoles(token);
+        List<String> directorates = jwtUtil.extractDirectorates(token);
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("username", username);
+        response.put("roles", roles);
+        response.put("directorates", directorates);
+        
+        return response;
+    }
+    
+    private String extractTokenFromRequest(HttpServletRequest request) {
+        String bearerToken = request.getHeader("Authorization");
+        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
+            return bearerToken.substring(7);
+        }
+        return null;
+    }
+}
+Application Properties
+application.yml
+text
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: password
+  
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+jwt:
+  secret: mySecretKey
+  expiration: 86400
+
+server:
+  port: 8080
+
+logging:
+  level:
+    com.example.auth: DEBUG
+    org.springframework.security: DEBUG
+Data Initialization
+data.sql
+sql
+-- Insert roles
+INSERT INTO role (role_no, role_name) VALUES (10, 'TD');
+INSERT INTO role (role_no, role_name) VALUES (15, 'GD');
+
+-- Insert users (password is 'password' encoded with BCrypt)
+INSERT INTO users (username, password, enabled) VALUES ('user1', '$2a$10$slYQmyNdGzTn7ZLBXBChFOC9f6kFjAqPhccnP6DxlWXx2lPk1C3G6', true);
+INSERT INTO users (username, password, enabled) VALUES ('user2', '$2a$10$slYQmyNdGzTn7ZLBXBChFOC9f6kFjAqPhccnP6DxlWXx2lPk1C3G6', true);
+
+-- Insert user roles (assuming empId 1 for user1, empId 2 for user2)
+INSERT INTO user_role (empid, role_no, role_name, directorate) VALUES (1, 10, 'TD', 'SDD');
+INSERT INTO user_role (empid, role_no, role_name, directorate) VALUES (1, 10, 'TD', 'CND');
+INSERT INTO user_role (empid, role_no, role_name, directorate) VALUES (2, 15, 'GD', 'SDD');
+Main Application Class
+AuthApplication.java
+java
+package com.example.auth;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class AuthApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(AuthApplication.class, args);
+    }
+}
+Usage Examples
+Login Request
+bash
+POST /api/auth/login
+Content-Type: application/json
+
+{
+    "username": "user1",
+    "password": "password"
+}
+Response
+json
+{
+    "token": "eyJhbGciOiJIUzI1NiJ9...",
+    "type": "Bearer",
+    "username": "user1",
+    "roles": ["TD"],
+    "directorates": ["SDD", "CND"]
+}
+Protected Resource Access
+bash
+GET /api/td/dashboard
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+This implementation provides:
+
+Multi-directorate support for users
+
+Role-based access control with JWT
+
+Spring Security integration
+
+Flexible authentication system
+
+Java 21 and Spring Boot 3.5.5 compatibility
+
+{
+    "token": "eyJhbGciOiJIUzI1NiJ9...",
+    "type": "Bearer",
+    "username": "user1",
+    "roles": ["TD"],
+    "directorates": ["SDD", "CND"]
+}  here after aunthenticate i want need to ask user from which directorate u need to login like SDD or CND based on that we are restricting to the other
+
+{ "token": "eyJhbGciOiJIUzI1NiJ9...", "type": "Bearer", "username": "user1", "roles": ["TD"], "directorates": ["SDD", "CND"] } here after aunthenticate i want need to ask user from which directorate u need to login like SDD or CND based on that we are restricting to the other
+Enhanced JWT Authentication with Directorate Selection
+Here's the updated implementation that adds directorate selection after initial authentication:
+
+Updated DTOs
+DirectorateSelectionRequest.java
+java
+package com.example.auth.dto;
+
+public class DirectorateSelectionRequest {
+    private String selectedDirectorate;
+    
+    public DirectorateSelectionRequest() {}
+    
+    public DirectorateSelectionRequest(String selectedDirectorate) {
+        this.selectedDirectorate = selectedDirectorate;
+    }
+    
+    public String getSelectedDirectorate() { return selectedDirectorate; }
+    public void setSelectedDirectorate(String selectedDirectorate) { this.selectedDirectorate = selectedDirectorate; }
+}
+JwtResponse.java (Updated)
+java
+package com.example.auth.dto;
+
+import java.util.List;
+
+public class JwtResponse {
+    private String token;
+    private String type = "Bearer";
+    private String username;
+    private List<String> roles;
+    private List<String> directorates;
+    private String selectedDirectorate;
+    private boolean requiresDirectorateSelection;
+    
+    // Constructor for initial login (multiple directorates)
+    public JwtResponse(String username, List<String> roles, List<String> directorates) {
+        this.username = username;
+        this.roles = roles;
+        this.directorates = directorates;
+        this.requiresDirectorateSelection = directorates.size() > 1;
+    }
+    
+    // Constructor for final token with selected directorate
+    public JwtResponse(String token, String username, List<String> roles, String selectedDirectorate) {
+        this.token = token;
+        this.username = username;
+        this.roles = roles;
+        this.selectedDirectorate = selectedDirectorate;
+        this.requiresDirectorateSelection = false;
+    }
+    
+    // Getters and Setters
+    public String getToken() { return token; }
+    public void setToken(String token) { this.token = token; }
+    
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
+    
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+    
+    public List<String> getRoles() { return roles; }
+    public void setRoles(List<String> roles) { this.roles = roles; }
+    
+    public List<String> getDirectorates() { return directorates; }
+    public void setDirectorates(List<String> directorates) { this.directorates = directorates; }
+    
+    public String getSelectedDirectorate() { return selectedDirectorate; }
+    public void setSelectedDirectorate(String selectedDirectorate) { this.selectedDirectorate = selectedDirectorate; }
+    
+    public boolean isRequiresDirectorateSelection() { return requiresDirectorateSelection; }
+    public void setRequiresDirectorateSelection(boolean requiresDirectorateSelection) { 
+        this.requiresDirectorateSelection = requiresDirectorateSelection; 
+    }
+}
+Updated JWT Utility
+JwtUtil.java (Updated)
+java
+package com.example.auth.service;
+
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.stereotype.Component;
+
+import javax.crypto.SecretKey;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+
+@Component
+public class JwtUtil {
+    
+    @Value("${jwt.secret:mySecretKey}")
+    private String secret;
+    
+    @Value("${jwt.expiration:86400}")
+    private int jwtExpiration;
+    
+    // Temporary token expiration (5 minutes for directorate selection)
+    @Value("${jwt.temp-expiration:300}")
+    private int tempJwtExpiration;
+    
+    private SecretKey getSigningKey() {
+        return Keys.hmacShaKeyFor(secret.getBytes());
+    }
+    
+    public String extractUsername(String token) {
+        return extractClaim(token, Claims::getSubject);
+    }
+    
+    public Date extractExpiration(String token) {
+        return extractClaim(token, Claims::getExpiration);
+    }
+    
+    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
+        final Claims claims = extractAllClaims(token);
+        return claimsResolver.apply(claims);
+    }
+    
+    private Claims extractAllClaims(String token) {
+        return Jwts.parser()
+                .verifyWith(getSigningKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+    }
+    
+    private Boolean isTokenExpired(String token) {
+        return extractExpiration(token).before(new Date());
+    }
+    
+    // Generate temporary token for directorate selection
+    public String generateTempToken(UserDetails userDetails, List<String> roles, List<String> directorates) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("roles", roles);
+        claims.put("directorates", directorates);
+        claims.put("temp", true);
+        return createTempToken(claims, userDetails.getUsername());
+    }
+    
+    // Generate final token with selected directorate
+    public String generateToken(UserDetails userDetails, List<String> roles, String selectedDirectorate) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("roles", roles);
+        claims.put("selectedDirectorate", selectedDirectorate);
+        claims.put("temp", false);
+        return createToken(claims, userDetails.getUsername());
+    }
+    
+    private String createToken(Map<String, Object> claims, String subject) {
+        return Jwts.builder()
+                .claims(claims)
+                .subject(subject)
+                .issuedAt(new Date(System.currentTimeMillis()))
+                .expiration(new Date(System.currentTimeMillis() + jwtExpiration * 1000L))
+                .signWith(getSigningKey())
+                .compact();
+    }
+    
+    private String createTempToken(Map<String, Object> claims, String subject) {
+        return Jwts.builder()
+                .claims(claims)
+                .subject(subject)
+                .issuedAt(new Date(System.currentTimeMillis()))
+                .expiration(new Date(System.currentTimeMillis() + tempJwtExpiration * 1000L))
+                .signWith(getSigningKey())
+                .compact();
+    }
+    
+    public Boolean validateToken(String token, UserDetails userDetails) {
+        final String username = extractUsername(token);
+        return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
+    }
+    
+    public List<String> extractRoles(String token) {
+        Claims claims = extractAllClaims(token);
+        return claims.get("roles", List.class);
+    }
+    
+    public List<String> extractDirectorates(String token) {
+        Claims claims = extractAllClaims(token);
+        return claims.get("directorates", List.class);
+    }
+    
+    public String extractSelectedDirectorate(String token) {
+        Claims claims = extractAllClaims(token);
+        return claims.get("selectedDirectorate", String.class);
+    }
+    
+    public boolean isTempToken(String token) {
+        Claims claims = extractAllClaims(token);
+        Boolean temp = claims.get("temp", Boolean.class);
+        return temp != null && temp;
+    }
+}
+Updated Service
+DirectorateService.java (New)
+java
+package com.example.auth.service;
+
+import com.example.auth.entity.UserRole;
+import com.example.auth.repository.UserRepository;
+import com.example.auth.repository.UserRoleRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+public class DirectorateService {
+    
+    @Autowired
+    private UserRepository userRepository;
+    
+    @Autowired
+    private UserRoleRepository userRoleRepository;
+    
+    public boolean isValidDirectorateForUser(String username, String directorate) {
+        return userRepository.findByUsername(username)
+                .map(user -> userRoleRepository.findByEmpId(user.getEmpId())
+                        .stream()
+                        .anyMatch(role -> role.getDirectorate().equals(directorate)))
+                .orElse(false);
+    }
+    
+    public List<String> getUserDirectorates(String username) {
+        return userRepository.findByUsername(username)
+                .map(user -> userRoleRepository.findByEmpId(user.getEmpId())
+                        .stream()
+                        .map(UserRole::getDirectorate)
+                        .distinct()
+                        .collect(Collectors.toList()))
+                .orElse(List.of());
+    }
+}
+Updated Controllers
+AuthController.java (Updated)
+java
+package com.example.auth.controller;
+
+import com.example.auth.dto.DirectorateSelectionRequest;
+import com.example.auth.dto.JwtRequest;
+import com.example.auth.dto.JwtResponse;
+import com.example.auth.service.DirectorateService;
+import com.example.auth.service.JwtUserDetailsService;
+import com.example.auth.service.JwtUtil;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/auth")
+@CrossOrigin
+public class AuthController {
+    
+    @Autowired
+    private AuthenticationManager authenticationManager;
+    
+    @Autowired
+    private JwtUtil jwtUtil;
+    
+    @Autowired
+    private JwtUserDetailsService userDetailsService;
+    
+    @Autowired
+    private DirectorateService directorateService;
+    
+    @PostMapping("/login")
+    public ResponseEntity<?> createAuthenticationToken(@RequestBody JwtRequest authenticationRequest) throws Exception {
+        
+        authenticate(authenticationRequest.getUsername(), authenticationRequest.getPassword());
+        
+        final UserDetails userDetails = userDetailsService
+                .loadUserByUsername(authenticationRequest.getUsername());
+        
+        final List<String> roles = userDetailsService.getUserRoles(authenticationRequest.getUsername());
+        final List<String> directorates = userDetailsService.getUserDirectorates(authenticationRequest.getUsername());
+        
+        // If user has multiple directorates, return response asking for directorate selection
+        if (directorates.size() > 1) {
+            final String tempToken = jwtUtil.generateTempToken(userDetails, roles, directorates);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("tempToken", tempToken);
+            response.put("username", userDetails.getUsername());
+            response.put("roles", roles);
+            response.put("directorates", directorates);
+            response.put("requiresDirectorateSelection", true);
+            response.put("message", "Please select a directorate to continue");
+            
+            return ResponseEntity.ok(response);
+        } else {
+            // Single directorate - generate final token directly
+            String selectedDirectorate = directorates.get(0);
+            final String token = jwtUtil.generateToken(userDetails, roles, selectedDirectorate);
+            
+            return ResponseEntity.ok(new JwtResponse(token, userDetails.getUsername(), roles, selectedDirectorate));
+        }
+    }
+    
+    @PostMapping("/select-directorate")
+    public ResponseEntity<?> selectDirectorate(@RequestBody DirectorateSelectionRequest request, 
+                                              HttpServletRequest httpRequest) throws Exception {
+        
+        String tempToken = extractTokenFromRequest(httpRequest);
+        if (tempToken == null || !jwtUtil.isTempToken(tempToken)) {
+            return ResponseEntity.badRequest().body("Invalid or missing temporary token");
+        }
+        
+        String username = jwtUtil.extractUsername(tempToken);
+        List<String> availableDirectorates = jwtUtil.extractDirectorates(tempToken);
+        List<String> roles = jwtUtil.extractRoles(tempToken);
+        
+        // Validate selected directorate
+        if (!availableDirectorates.contains(request.getSelectedDirectorate())) {
+            return ResponseEntity.badRequest().body("Invalid directorate selection");
+        }
+        
+        // Verify user has access to selected directorate
+        if (!directorateService.isValidDirectorateForUser(username, request.getSelectedDirectorate())) {
+            return ResponseEntity.badRequest().body("User does not have access to selected directorate");
+        }
+        
+        final UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+        final String finalToken = jwtUtil.generateToken(userDetails, roles, request.getSelectedDirectorate());
+        
+        return ResponseEntity.ok(new JwtResponse(finalToken, username, roles, request.getSelectedDirectorate()));
+    }
+    
+    @GetMapping("/user-directorates")
+    public ResponseEntity<?> getUserDirectorates(HttpServletRequest request) {
+        String tempToken = extractTokenFromRequest(request);
+        if (tempToken == null || !jwtUtil.isTempToken(tempToken)) {
+            return ResponseEntity.badRequest().body("Invalid or missing temporary token");
+        }
+        
+        String username = jwtUtil.extractUsername(tempToken);
+        List<String> directorates = directorateService.getUserDirectorates(username);
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("username", username);
+        response.put("directorates", directorates);
+        
+        return ResponseEntity.ok(response);
+    }
+    
+    private void authenticate(String username, String password) throws Exception {
+        try {
+            authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(username, password));
+        } catch (DisabledException e) {
+            throw new Exception("USER_DISABLED", e);
+        } catch (BadCredentialsException e) {
+            throw new Exception("INVALID_CREDENTIALS", e);
+        }
+    }
+    
+    private String extractTokenFromRequest(HttpServletRequest request) {
+        String bearerToken = request.getHeader("Authorization");
+        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
+            return bearerToken.substring(7);
+        }
+        return null;
+    }
+}
+UserController.java (Updated)
+java
+package com.example.auth.controller;
+
+import com.example.auth.service.JwtUtil;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api")
+@CrossOrigin
+public class UserController {
+    
+    @Autowired
+    private JwtUtil jwtUtil;
+    
+    @GetMapping("/td/dashboard")
+    @PreAuthorize("hasRole('TD')")
+    public ResponseEntity<?> getTdDashboard(HttpServletRequest request) {
+        String token = extractTokenFromRequest(request);
+        
+        if (jwtUtil.isTempToken(token)) {
+            return ResponseEntity.badRequest().body("Please complete directorate selection first");
+        }
+        
+        String selectedDirectorate = jwtUtil.extractSelectedDirectorate(token);
+        String username = jwtUtil.extractUsername(token);
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Welcome to TD Dashboard");
+        response.put("username", username);
+        response.put("selectedDirectorate", selectedDirectorate);
+        response.put("data", getTdDataForDirectorate(selectedDirectorate));
+        
+        return ResponseEntity.ok(response);
+    }
+    
+    @GetMapping("/gd/dashboard")
+    @PreAuthorize("hasRole('GD')")
+    public ResponseEntity<?> getGdDashboard(HttpServletRequest request) {
+        String token = extractTokenFromRequest(request);
+        
+        if (jwtUtil.isTempToken(token)) {
+            return ResponseEntity.badRequest().body("Please complete directorate selection first");
+        }
+        
+        String selectedDirectorate = jwtUtil.extractSelectedDirectorate(token);
+        String username = jwtUtil.extractUsername(token);
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Welcome to GD Dashboard");
+        response.put("username", username);
+        response.put("selectedDirectorate", selectedDirectorate);
+        response.put("data", getGdDataForDirectorate(selectedDirectorate));
+        
+        return ResponseEntity.ok(response);
+    }
+    
+    @GetMapping("/user/profile")
+    public ResponseEntity<?> getUserProfile(HttpServletRequest request) {
+        String token = extractTokenFromRequest(request);
+        
+        if (jwtUtil.isTempToken(token)) {
+            return ResponseEntity.badRequest().body("Please complete directorate selection first");
+        }
+        
+        String username = jwtUtil.extractUsername(token);
+        List<String> roles = jwtUtil.extractRoles(token);
+        String selectedDirectorate = jwtUtil.extractSelectedDirectorate(token);
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("username", username);
+        response.put("roles", roles);
+        response.put("selectedDirectorate", selectedDirectorate);
+        
+        return ResponseEntity.ok(response);
+    }
+    
+    private String extractTokenFromRequest(HttpServletRequest request) {
+        String bearerToken = request.getHeader("Authorization");
+        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
+            return bearerToken.substring(7);
+        }
+        return null;
+    }
+    
+    private Map<String, Object> getTdDataForDirectorate(String directorate) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("reports", "TD reports for " + directorate);
+        data.put("projects", "TD projects in " + directorate);
+        data.put("teams", "TD teams under " + directorate);
+        return data;
+    }
+    
+    private Map<String, Object> getGdDataForDirectorate(String directorate) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("overview", "GD overview for " + directorate);
+        data.put("statistics", "GD statistics in " + directorate);
+        data.put("operations", "GD operations under " + directorate);
+        return data;
+    }
+}
+Updated Security Filter
+JwtRequestFilter.java (Updated)
+java
+package com.example.auth.config;
+
+import com.example.auth.service.JwtUserDetailsService;
+import com.example.auth.service.JwtUtil;
+import io.jsonwebtoken.ExpiredJwtException;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
+
+@Component
+public class JwtRequestFilter extends OncePerRequestFilter {
+    
+    @Autowired
+    private JwtUserDetailsService jwtUserDetailsService;
+    
+    @Autowired
+    private JwtUtil jwtUtil;
+    
+    // Endpoints that allow temporary tokens
+    private static final List<String> TEMP_TOKEN_ALLOWED_ENDPOINTS = Arrays.asList(
+        "/api/auth/select-directorate",
+        "/api/auth/user-directorates"
+    );
+    
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, 
+                                    FilterChain chain) throws ServletException, IOException {
+        
+        final String requestTokenHeader = request.getHeader("Authorization");
+        final String requestURI = request.getRequestURI();
+        
+        String username = null;
+        String jwtToken = null;
+        
+        if (requestTokenHeader != null && requestTokenHeader.startsWith("Bearer ")) {
+            jwtToken = requestTokenHeader.substring(7);
+            try {
+                username = jwtUtil.extractUsername(jwtToken);
+                
+                // Check if it's a temporary token being used on non-allowed endpoints
+                if (jwtUtil.isTempToken(jwtToken) && !isTempTokenAllowedEndpoint(requestURI)) {
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.getWriter().write("{\"error\":\"Please complete directorate selection first\"}");
+                    return;
+                }
+                
+            } catch (IllegalArgumentException e) {
+                System.out.println("Unable to get JWT Token");
+            } catch (ExpiredJwtException e) {
+                System.out.println("JWT Token has expired");
+            }
+        }
+        
+        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            UserDetails userDetails = this.jwtUserDetailsService.loadUserByUsername(username);
+            
+            if (jwtUtil.validateToken(jwtToken, userDetails)) {
+                UsernamePasswordAuthenticationToken authToken = 
+                        new UsernamePasswordAuthenticationToken(
+                                userDetails, null, userDetails.getAuthorities());
+                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authToken);
+            }
+        }
+        chain.doFilter(request, response);
+    }
+    
+    private boolean isTempTokenAllowedEndpoint(String requestURI) {
+        return TEMP_TOKEN_ALLOWED_ENDPOINTS.stream()
+                .anyMatch(requestURI::startsWith);
+    }
+}
+Updated Application Properties
+application.yml (Updated)
+text
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: password
+  
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+jwt:
+  secret: mySecretKey
+  expiration: 86400
+  temp-expiration: 300  # 5 minutes for directorate selection
+
+server:
+  port: 8080
+
+logging:
+  level:
+    com.example.auth: DEBUG
+    org.springframework.security: DEBUG
+Usage Flow Examples
+1. Initial Login (Multiple Directorates)
+Request:
+
+bash
+POST /api/auth/login
+Content-Type: application/json
+
+{
+    "username": "user1",
+    "password": "password"
+}
+Response:
+
+json
+{
+    "tempToken": "eyJhbGciOiJIUzI1NiJ9...",
+    "username": "user1",
+    "roles": ["TD"],
+    "directorates": ["SDD", "CND"],
+    "requiresDirectorateSelection": true,
+    "message": "Please select a directorate to continue"
+}
+2. Directorate Selection
+Request:
+
+bash
+POST /api/auth/select-directorate
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+Content-Type: application/json
+
+{
+    "selectedDirectorate": "SDD"
+}
+Response:
+
+json
+{
+    "token": "eyJhbGciOiJIUzI1NiJ9...",
+    "type": "Bearer",
+    "username": "user1",
+    "roles": ["TD"],
+    "selectedDirectorate": "SDD"
+}
+3. Access Protected Resources
+Request:
+
+bash
+GET /api/td/dashboard
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+Response:
+
+json
+{
+    "message": "Welcome to TD Dashboard",
+    "username": "user1",
+    "selectedDirectorate": "SDD",
+    "data": {
+        "reports": "TD reports for SDD",
+        "projects": "TD projects in SDD",
+        "teams": "TD teams under SDD"
+    }
+}
+Key Features
+Two-step authentication: Initial login + directorate selection
+
+Temporary tokens: 5-minute expiry for directorate selection
+
+Directorate-specific access: Users can only access data from their selected directorate
+
+Security restrictions: Temporary tokens can't access protected resources
+
+Flexible flow: Single directorate users skip selection step
+
+Validation: Ensures users can only select directorates they have access to
+
+This implementation provides secure, directorate-specific access control while maintaining a smooth user experience.
+
+if no ultiple directorates are there directly need to login
+
+if no ultiple directorates are there directly need to login
+You're absolutely right! The current implementation already handles this scenario. Let me show you exactly how it works and provide a cleaner version:
+
+Current Flow Logic
+In the AuthController.java, the login method already checks for multiple directorates:
+
+java
+@PostMapping("/login")
+public ResponseEntity<?> createAuthenticationToken(@RequestBody JwtRequest authenticationRequest) throws Exception {
+    
+    authenticate(authenticationRequest.getUsername(), authenticationRequest.getPassword());
+    
+    final UserDetails userDetails = userDetailsService
+            .loadUserByUsername(authenticationRequest.getUsername());
+    
+    final List<String> roles = userDetailsService.getUserRoles(authenticationRequest.getUsername());
+    final List<String> directorates = userDetailsService.getUserDirectorates(authenticationRequest.getUsername());
+    
+    // ✅ If user has multiple directorates, ask for selection
+    if (directorates.size() > 1) {
+        final String tempToken = jwtUtil.generateTempToken(userDetails, roles, directorates);
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("tempToken", tempToken);
+        response.put("username", userDetails.getUsername());
+        response.put("roles", roles);
+        response.put("directorates", directorates);
+        response.put("requiresDirectorateSelection", true);
+        response.put("message", "Please select a directorate to continue");
+        
+        return ResponseEntity.ok(response);
+    } else {
+        // ✅ Single directorate - generate final token directly (NO SELECTION NEEDED)
+        String selectedDirectorate = directorates.get(0);
+        final String token = jwtUtil.generateToken(userDetails, roles, selectedDirectorate);
+        
+        return ResponseEntity.ok(new JwtResponse(token, userDetails.getUsername(), roles, selectedDirectorate));
+    }
+}
+Example Scenarios
+Scenario 1: User with Single Directorate (user2 - GD with only SDD)
+Request:
+
+bash
+POST /api/auth/login
+Content-Type: application/json
+
+{
+    "username": "user2",
+    "password": "password"
+}
+Response (Direct Login - No Selection Required):
+
+json
+{
+    "token": "eyJhbGciOiJIUzI1NiJ9...",
+    "type": "Bearer",
+    "username": "user2",
+    "roles": ["GD"],
+    "selectedDirectorate": "SDD",
+    "requiresDirectorateSelection": false
+}
+Scenario 2: User with Multiple Directorates (user1 - TD with SDD and CND)
+Request:
+
+bash
+POST /api/auth/login
+Content-Type: application/json
+
+{
+    "username": "user1", 
+    "password": "password"
+}
+Response (Requires Selection):
+
+json
+{
+    "tempToken": "eyJhbGciOiJIUzI1NiJ9...",
+    "username": "user1",
+    "roles": ["TD"],
+    "directorates": ["SDD", "CND"],
+    "requiresDirectorateSelection": true,
+    "message": "Please select a directorate to continue"
+}
+Updated JwtResponse.java (Cleaner)
+Here's a cleaner version of the response DTO:
+
+java
+package com.example.auth.dto;
+
+import java.util.List;
+
+public class JwtResponse {
+    private String token;
+    private String tempToken;
+    private String type = "Bearer";
+    private String username;
+    private List<String> roles;
+    private List<String> directorates;
+    private String selectedDirectorate;
+    private boolean requiresDirectorateSelection;
+    private String message;
+    
+    // Constructor for single directorate (direct login)
+    public JwtResponse(String token, String username, List<String> roles, String selectedDirectorate) {
+        this.token = token;
+        this.username = username;
+        this.roles = roles;
+        this.selectedDirectorate = selectedDirectorate;
+        this.requiresDirectorateSelection = false;
+    }
+    
+    // Constructor for multiple directorates (requires selection)
+    public JwtResponse(String tempToken, String username, List<String> roles, List<String> directorates, String message) {
+        this.tempToken = tempToken;
+        this.username = username;
+        this.roles = roles;
+        this.directorates = directorates;
+        this.requiresDirectorateSelection = true;
+        this.message = message;
+    }
+    
+    // Getters and Setters
+    public String getToken() { return token; }
+    public void setToken(String token) { this.token = token; }
+    
+    public String getTempToken() { return tempToken; }
+    public void setTempToken(String tempToken) { this.tempToken = tempToken; }
+    
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
+    
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+    
+    public List<String> getRoles() { return roles; }
+    public void setRoles(List<String> roles) { this.roles = roles; }
+    
+    public List<String> getDirectorates() { return directorates; }
+    public void setDirectorates(List<String> directorates) { this.directorates = directorates; }
+    
+    public String getSelectedDirectorate() { return selectedDirectorate; }
+    public void setSelectedDirectorate(String selectedDirectorate) { this.selectedDirectorate = selectedDirectorate; }
+    
+    public boolean isRequiresDirectorateSelection() { return requiresDirectorateSelection; }
+    public void setRequiresDirectorateSelection(boolean requiresDirectorateSelection) { 
+        this.requiresDirectorateSelection = requiresDirectorateSelection; 
+    }
+    
+    public String getMessage() { return message; }
+    public void setMessage(String message) { this.message = message; }
+}
+Updated AuthController.java (Cleaner)
+java
+@PostMapping("/login")
+public ResponseEntity<?> createAuthenticationToken(@RequestBody JwtRequest authenticationRequest) throws Exception {
+    
+    authenticate(authenticationRequest.getUsername(), authenticationRequest.getPassword());
+    
+    final UserDetails userDetails = userDetailsService
+            .loadUserByUsername(authenticationRequest.getUsername());
+    
+    final List<String> roles = userDetailsService.getUserRoles(authenticationRequest.getUsername());
+    final List<String> directorates = userDetailsService.getUserDirectorates(authenticationRequest.getUsername());
+    
+    if (directorates.size() > 1) {
+        // Multiple directorates - require selection
+        final String tempToken = jwtUtil.generateTempToken(userDetails, roles, directorates);
+        return ResponseEntity.ok(new JwtResponse(tempToken, userDetails.getUsername(), roles, directorates, 
+                "Please select a directorate to continue"));
+    } else {
+        // Single directorate - direct login
+        String selectedDirectorate = directorates.get(0);
+        final String token = jwtUtil.generateToken(userDetails, roles, selectedDirectorate);
+        return ResponseEntity.ok(new JwtResponse(token, userDetails.getUsername(), roles, selectedDirectorate));
+    }
+}
+Frontend Logic Example
+javascript
+// Login function
+async function login(username, password) {
+    const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+    });
+    
+    const data = await response.json();
+    
+    if (data.requiresDirectorateSelection) {
+        // Show directorate selection UI
+        showDirectorateSelection(data.directorates, data.tempToken);
+    } else {
+        // Direct login - store token and redirect to dashboard
+        localStorage.setItem('authToken', data.token);
+        localStorage.setItem('selectedDirectorate', data.selectedDirectorate);
+        redirectToDashboard(data.roles[0]);
+    }
+}
+
+function showDirectorateSelection(directorates, tempToken) {
+    // Display UI with directorate options
+    // When user selects, call selectDirectorate()
+}
+
+async function selectDirectorate(selectedDirectorate, tempToken) {
+    const response = await fetch('/api/auth/select-directorate', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${tempToken}`
+        },
+        body: JSON.stringify({ selectedDirectorate })
+    });
+    
+    const data = await response.json();
+    localStorage.setItem('authToken', data.token);
+    localStorage.setItem('selectedDirectorate', data.selectedDirectorate);
+    redirectToDashboard(data.roles[0]);
+}
+The system automatically:
+
+Single directorate users: Get direct access with full JWT token
+
+Multiple directorate users: Must select directorate first
+
+No extra steps for users with only one directorate access
+
+give entire for Mysql and oracle 21C
+
+give entire for Mysql and oracle 21C
+Complete Spring Boot 3.5.5 JWT Authentication with MySQL and Oracle 21c
+Project Dependencies (pom.xml)
+xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.5.5</version>
+        <relativePath/>
+    </parent>
+    
+    <groupId>com.example</groupId>
+    <artifactId>jwt-auth-db</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <packaging>jar</packaging>
+    
+    <properties>
+        <java.version>21</java.version>
+    </properties>
+    
+    <dependencies>
+        <!-- Spring Boot Starters -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        
+        <!-- JWT Dependencies -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>0.12.3</version>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>0.12.3</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>0.12.3</version>
+            <scope>runtime</scope>
+        </dependency>
+        
+        <!-- Database Drivers -->
+        <!-- MySQL Connector -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        
+        <!-- Oracle JDBC Driver -->
+        <dependency>
+            <groupId>com.oracle.database.jdbc</groupId>
+            <artifactId>ojdbc11</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        
+        <!-- Connection Pooling -->
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+        </dependency>
+        
+        <!-- Development Tools -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
+        
+        <!-- Testing -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+    
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+Configuration Files
+application.yml
+text
+server:
+  port: 8080
+
+logging:
+  level:
+    com.example.auth: DEBUG
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
+jwt:
+  secret: MySecretKeyForJWTTokenGenerationAndValidation2025
+  expiration: 86400  # 24 hours in seconds
+  temp-expiration: 300  # 5 minutes for directorate selection
+
+spring:
+  profiles:
+    active: mysql  # Change to 'oracle' for Oracle database
+
+---
+# MySQL Configuration
+spring:
+  config:
+    activate:
+      on-profile: mysql
+  datasource:
+    url: jdbc:mysql://localhost:3306/jwt_auth_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: root
+    password: password
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      maximum-pool-size: 10
+      minimum-idle: 5
+  
+  jpa:
+    database-platform: org.hibernate.dialect.MySQLDialect
+    hibernate:
+      ddl-auto: update
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          batch_size: 20
+
+---
+# Oracle Configuration
+spring:
+  config:
+    activate:
+      on-profile: oracle
+  datasource:
+    url: jdbc:oracle:thin:@localhost:1521:XE
+    username: jwt_user
+    password: password
+    driver-class-name: oracle.jdbc.OracleDriver
+    hikari:
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      maximum-pool-size: 10
+      minimum-idle: 5
+  
+  jpa:
+    database-platform: org.hibernate.dialect.Oracle21cDialect
+    hibernate:
+      ddl-auto: update
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          batch_size: 20
+Entity Classes
+Role.java
+java
+package com.example.auth.entity;
+
+import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+
+@Entity
+@Table(name = "roles")
+public class Role {
+    @Id
+    @Column(name = "role_no")
+    @NotNull(message = "Role number is required")
+    private Integer roleNo;
+    
+    @Column(name = "role_name", nullable = false, length = 50)
+    @NotBlank(message = "Role name is required")
+    private String roleName;
+    
+    // Constructors
+    public Role() {}
+    
+    public Role(Integer roleNo, String roleName) {
+        this.roleNo = roleNo;
+        this.roleName = roleName;
+    }
+    
+    // Getters and Setters
+    public Integer getRoleNo() { return roleNo; }
+    public void setRoleNo(Integer roleNo) { this.roleNo = roleNo; }
+    
+    public String getRoleName() { return roleName; }
+    public void setRoleName(String roleName) { this.roleName = roleName; }
+    
+    @Override
+    public String toString() {
+        return "Role{roleNo=" + roleNo + ", roleName='" + roleName + "'}";
+    }
+}
+User.java
+java
+package com.example.auth.entity;
+
+import jakarta.persistence.*;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "users", 
+       uniqueConstraints = {
+           @UniqueConstraint(columnNames = "username"),
+           @UniqueConstraint(columnNames = "email")
+       })
+public class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "emp_id")
+    private Long empId;
+    
+    @Column(name = "username", unique = true, nullable = false, length = 50)
+    @NotBlank(message = "Username is required")
+    @Size(max = 50, message = "Username must not exceed 50 characters")
+    private String username;
+    
+    @Column(name = "email", unique = true, nullable = false, length = 100)
+    @NotBlank(message = "Email is required")
+    @Email(message = "Email should be valid")
+    @Size(max = 100, message = "Email must not exceed 100 characters")
+    private String email;
+    
+    @Column(name = "password", nullable = false)
+    @NotBlank(message = "Password is required")
+    @Size(min = 6, message = "Password must be at least 6 characters")
+    private String password;
+    
+    @Column(name = "first_name", length = 50)
+    private String firstName;
+    
+    @Column(name = "last_name", length = 50)
+    private String lastName;
+    
+    @Column(name = "enabled", nullable = false)
+    private Boolean enabled = true;
+    
+    @Column(name = "account_non_expired", nullable = false)
+    private Boolean accountNonExpired = true;
+    
+    @Column(name = "account_non_locked", nullable = false)
+    private Boolean accountNonLocked = true;
+    
+    @Column(name = "credentials_non_expired", nullable = false)
+    private Boolean credentialsNonExpired = true;
+    
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
+    
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+    
+    // Constructors
+    public User() {}
+    
+    public User(String username, String email, String password) {
+        this.username = username;
+        this.email = email;
+        this.password = password;
+    }
+    
+    // Getters and Setters
+    public Long getEmpId() { return empId; }
+    public void setEmpId(Long empId) { this.empId = empId; }
+    
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+    
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+    
+    public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }
+    
+    public String getFirstName() { return firstName; }
+    public void setFirstName(String firstName) { this.firstName = firstName; }
+    
+    public String getLastName() { return lastName; }
+    public void setLastName(String lastName) { this.lastName = lastName; }
+    
+    public Boolean getEnabled() { return enabled; }
+    public void setEnabled(Boolean enabled) { this.enabled = enabled; }
+    
+    public Boolean getAccountNonExpired() { return accountNonExpired; }
+    public void setAccountNonExpired(Boolean accountNonExpired) { this.accountNonExpired = accountNonExpired; }
+    
+    public Boolean getAccountNonLocked() { return accountNonLocked; }
+    public void setAccountNonLocked(Boolean accountNonLocked) { this.accountNonLocked = accountNonLocked; }
+    
+    public Boolean getCredentialsNonExpired() { return credentialsNonExpired; }
+    public void setCredentialsNonExpired(Boolean credentialsNonExpired) { this.credentialsNonExpired = credentialsNonExpired; }
+    
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+}
+UserRole.java
+java
+package com.example.auth.entity;
+
+import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+
+@Entity
+@Table(name = "user_roles")
+@IdClass(UserRoleId.class)
+public class UserRole {
+    @Id
+    @Column(name = "emp_id")
+    @NotNull(message = "Employee ID is required")
+    private Long empId;
+    
+    @Id
+    @Column(name = "role_no")
+    @NotNull(message = "Role number is required")
+    private Integer roleNo;
+    
+    @Id
+    @Column(name = "directorate", length = 10)
+    @NotBlank(message = "Directorate is required")
+    private String directorate;
+    
+    @Column(name = "role_name", nullable = false, length = 50)
+    @NotBlank(message = "Role name is required")
+    private String roleName;
+    
+    @Column(name = "is_active", nullable = false)
+    private Boolean isActive = true;
+    
+    // Constructors
+    public UserRole() {}
+    
+    public UserRole(Long empId, Integer roleNo, String roleName, String directorate) {
+        this.empId = empId;
+        this.roleNo = roleNo;
+        this.roleName = roleName;
+        this.directorate = directorate;
+    }
+    
+    // Getters and Setters
+    public Long getEmpId() { return empId; }
+    public void setEmpId(Long empId) { this.empId = empId; }
+    
+    public Integer getRoleNo() { return roleNo; }
+    public void setRoleNo(Integer roleNo) { this.roleNo = roleNo; }
+    
+    public String getRoleName() { return roleName; }
+    public void setRoleName(String roleName) { this.roleName = roleName; }
+    
+    public String getDirectorate() { return directorate; }
+    public void setDirectorate(String directorate) { this.directorate = directorate; }
+    
+    public Boolean getIsActive() { return isActive; }
+    public void setIsActive(Boolean isActive) { this.isActive = isActive; }
+    
+    @Override
+    public String toString() {
+        return "UserRole{empId=" + empId + ", roleNo=" + roleNo + 
+               ", roleName='" + roleName + "', directorate='" + directorate + "'}";
+    }
+}
+UserRoleId.java
+java
+package com.example.auth.entity;
+
+import java.io.Serializable;
+import java.util.Objects;
+
+public class UserRoleId implements Serializable {
+    private Long empId;
+    private Integer roleNo;
+    private String directorate;
+    
+    public UserRoleId() {}
+    
+    public UserRoleId(Long empId, Integer roleNo, String directorate) {
+        this.empId = empId;
+        this.roleNo = roleNo;
+        this.directorate = directorate;
+    }
+    
+    // Getters and Setters
+    public Long getEmpId() { return empId; }
+    public void setEmpId(Long empId) { this.empId = empId; }
+    
+    public Integer getRoleNo() { return roleNo; }
+    public void setRoleNo(Integer roleNo) { this.roleNo = roleNo; }
+    
+    public String getDirectorate() { return directorate; }
+    public void setDirectorate(String directorate) { this.directorate = directorate; }
+    
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        UserRoleId that = (UserRoleId) o;
+        return Objects.equals(empId, that.empId) && 
+               Objects.equals(roleNo, that.roleNo) && 
+               Objects.equals(directorate, that.directorate);
+    }
+    
+    @Override
+    public int hashCode() {
+        return Objects.hash(empId, roleNo, directorate);
+    }
+}
+Repository Interfaces
+UserRepository.java
+java
+package com.example.auth.repository;
+
+import com.example.auth.entity.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+@Repository
+public interface UserRepository extends JpaRepository<User, Long> {
+    
+    Optional<User> findByUsername(String username);
+    
+    Optional<User> findByEmail(String email);
+    
+    Boolean existsByUsername(String username);
+    
+    Boolean existsByEmail(String email);
+    
+    @Query("SELECT u FROM User u WHERE u.username = :username AND u.enabled = true")
+    Optional<User> findActiveUserByUsername(@Param("username") String username);
+    
+    @Query("SELECT u FROM User u WHERE u.email = :email AND u.enabled = true")
+    Optional<User> findActiveUserByEmail(@Param("email") String email);
+}
+UserRoleRepository.java
+java
+package com.example.auth.repository;
+
+import com.example.auth.entity.UserRole;
+import com.example.auth.entity.UserRoleId;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public interface UserRoleRepository extends JpaRepository<UserRole, UserRoleId> {
+    
+    List<UserRole> findByEmpId(Long empId);
+    
+    List<UserRole> findByEmpIdAndIsActive(Long empId, Boolean isActive);
+    
+    @Query("SELECT ur FROM UserRole ur WHERE ur.empId = :empId AND ur.isActive = true")
+    List<UserRole> findActiveRolesByEmpId(@Param("empId") Long empId);
+    
+    @Query("SELECT DISTINCT ur.directorate FROM UserRole ur WHERE ur.empId = :empId AND ur.isActive = true")
+    List<String> findDirectoratesByEmpId(@Param("empId") Long empId);
+    
+    @Query("SELECT DISTINCT ur.roleName FROM UserRole ur WHERE ur.empId = :empId AND ur.isActive = true")
+    List<String> findRoleNamesByEmpId(@Param("empId") Long empId);
+    
+    @Query("SELECT COUNT(ur) > 0 FROM UserRole ur WHERE ur.empId = :empId AND ur.directorate = :directorate AND ur.isActive = true")
+    Boolean existsByEmpIdAndDirectorateAndIsActive(@Param("empId") Long empId, @Param("directorate") String directorate);
+}
+RoleRepository.java
+java
+package com.example.auth.repository;
+
+import com.example.auth.entity.Role;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+@Repository
+public interface RoleRepository extends JpaRepository<Role, Integer> {
+    
+    Optional<Role> findByRoleName(String roleName);
+    
+    Boolean existsByRoleName(String roleName);
+}
+Service Classes
+JwtUtil.java
+java
+package com.example.auth.service;
+
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.stereotype.Component;
+
+import javax.crypto.SecretKey;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+
+@Component
+public class JwtUtil {
+    
+    private static final Logger logger = LoggerFactory.getLogger(JwtUtil.class);
+    
+    @Value("${jwt.secret}")
+    private String secret;
+    
+    @Value("${jwt.expiration}")
+    private int jwtExpiration;
+    
+    @Value("${jwt.temp-expiration}")
+    private int tempJwtExpiration;
+    
+    private SecretKey getSigningKey() {
+        return Keys.hmacShaKeyFor(secret.getBytes());
+    }
+    
+    public String extractUsername(String token) {
+        return extractClaim(token, Claims::getSubject);
+    }
+    
+    public Date extractExpiration(String token) {
+        return extractClaim(token, Claims::getExpiration);
+    }
+    
+    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
+        final Claims claims = extractAllClaims(token);
+        return claimsResolver.apply(claims);
+    }
+    
+    private Claims extractAllClaims(String token) {
+        try {
+            return Jwts.parser()
+                    .verifyWith(getSigningKey())
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
+        } catch (Exception e) {
+            logger.error("Error parsing JWT token: {}", e.getMessage());
+            throw e;
+        }
+    }
+    
+    private Boolean isTokenExpired(String token) {
+        return extractExpiration(token).before(new Date());
+    }
+    
+    // Generate temporary token for directorate selection
+    public String generateTempToken(UserDetails userDetails, List<String> roles, List<String> directorates) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("roles", roles);
+        claims.put("directorates", directorates);
+        claims.put("temp", true);
+        claims.put("empId", getUserIdFromUserDetails(userDetails));
+        
+        logger.debug("Generating temp token for user: {}", userDetails.getUsername());
+        return createTempToken(claims, userDetails.getUsername());
+    }
+    
+    // Generate final token with selected directorate
+    public String generateToken(UserDetails userDetails, List<String> roles, String selectedDirectorate) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("roles", roles);
+        claims.put("selectedDirectorate", selectedDirectorate);
+        claims.put("temp", false);
+        claims.put("empId", getUserIdFromUserDetails(userDetails));
+        
+        logger.debug("Generating final token for user: {} with directorate: {}", 
+                    userDetails.getUsername(), selectedDirectorate);
+        return createToken(claims, userDetails.getUsername());
+    }
+    
+    private String createToken(Map<String, Object> claims, String subject) {
+        return Jwts.builder()
+                .claims(claims)
+                .subject(subject)
+                .issuedAt(new Date(System.currentTimeMillis()))
+                .expiration(new Date(System.currentTimeMillis() + jwtExpiration * 1000L))
+                .signWith(getSigningKey())
+                .compact();
+    }
+    
+    private String createTempToken(Map<String, Object> claims, String subject) {
+        return Jwts.builder()
+                .claims(claims)
+                .subject(subject)
+                .issuedAt(new Date(System.currentTimeMillis()))
+                .expiration(new Date(System.currentTimeMillis() + tempJwtExpiration * 1000L))
+                .signWith(getSigningKey())
+                .compact();
+    }
+    
+    public Boolean validateToken(String token, UserDetails userDetails) {
+        final String username = extractUsername(token);
+        return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
+    }
+    
+    @SuppressWarnings("unchecked")
+    public List<String> extractRoles(String token) {
+        Claims claims = extractAllClaims(token);
+        return (List<String>) claims.get("roles");
+    }
+    
+    @SuppressWarnings("unchecked")
+    public List<String> extractDirectorates(String token) {
+        Claims claims = extractAllClaims(token);
+        return (List<String>) claims.get("directorates");
+    }
+    
+    public String extractSelectedDirectorate(String token) {
+        Claims claims = extractAllClaims(token);
+        return (String) claims.get("selectedDirectorate");
+    }
+    
+    public Long extractEmpId(String token) {
+        Claims claims = extractAllClaims(token);
+        Object empId = claims.get("empId");
+        if (empId instanceof Integer) {
+            return ((Integer) empId).longValue();
+        }
+        return (Long) empId;
+    }
+    
+    public boolean isTempToken(String token) {
+        Claims claims = extractAllClaims(token);
+        Boolean temp = (Boolean) claims.get("temp");
+        return temp != null && temp;
+    }
+    
+    private Long getUserIdFromUserDetails(UserDetails userDetails) {
+        if (userDetails instanceof UserDetailsImpl) {
+            return ((UserDetailsImpl) userDetails).getId();
+        }
+        return null;
+    }
+}
+UserDetailsImpl.java
+java
+package com.example.auth.service;
+
+import com.example.auth.entity.User;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
+
+public class UserDetailsImpl implements UserDetails {
+    
+    private static final long serialVersionUID = 1L;
+    
+    private Long id;
+    private String username;
+    private String email;
+    private String password;
+    private Collection<? extends GrantedAuthority> authorities;
+    private boolean enabled;
+    private boolean accountNonExpired;
+    private boolean accountNonLocked;
+    private boolean credentialsNonExpired;
+    
+    public UserDetailsImpl(Long id, String username, String email, String password,
+                          Collection<? extends GrantedAuthority> authorities,
+                          boolean enabled, boolean accountNonExpired,
+                          boolean accountNonLocked, boolean credentialsNonExpired) {
+        this.id = id;
+        this.username = username;
+        this.email = email;
+        this.password = password;
+        this.authorities = authorities;
+        this.enabled = enabled;
+        this.accountNonExpired = accountNonExpired;
+        this.accountNonLocked = accountNonLocked;
+        this.credentialsNonExpired = credentialsNonExpired;
+    }
+    
+    public static UserDetailsImpl build(User user, List<String> roles) {
+        List<GrantedAuthority> authorities = roles.stream()
+                .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
+                .collect(Collectors.toList());
+        
+        return new UserDetailsImpl(
+                user.getEmpId(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getPassword(),
+                authorities,
+                user.getEnabled(),
+                user.getAccountNonExpired(),
+                user.getAccountNonLocked(),
+                user.getCredentialsNonExpired());
+    }
+    
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return authorities;
+    }
+    
+    public Long getId() {
+        return id;
+    }
+    
+    public String getEmail() {
+        return email;
+    }
+    
+    @Override
+    public String getPassword() {
+        return password;
+    }
+    
+    @Override
+    public String getUsername() {
+        return username;
+    }
+    
+    @Override
+    public boolean isAccountNonExpired() {
+        return accountNonExpired;
+    }
+    
+    @Override
+    public boolean isAccountNonLocked() {
+        return accountNonLocked;
+    }
+    
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return credentialsNonExpired;
+    }
+    
+    @Override
+    public boolean isEnabled() {
+        return enabled;
+    }
+    
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        UserDetailsImpl user = (UserDetailsImpl) o;
+        return Objects.equals(id, user.id);
+    }
+    
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
+    }
+}
+JwtUserDetailsService.java
+java
+package com.example.auth.service;
+
+import com.example.auth.entity.User;
+import com.example.auth.repository.UserRepository;
+import com.example.auth.repository.UserRoleRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Service
+public class JwtUserDetailsService implements UserDetailsService {
+    
+    private static final Logger logger = LoggerFactory.getLogger(JwtUserDetailsService.class);
+    
+    @Autowired
+    private UserRepository userRepository;
+    
+    @Autowired
+    private UserRoleRepository userRoleRepository;
+    
+    @Override
+    @Transactional
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        User user = userRepository.findActiveUserByUsername(username)
+                .orElseThrow(() -> {
+                    logger.error("User not found or not active: {}", username);
+                    return new UsernameNotFoundException("User not found: " + username);
+                });
+        
+        List<String> roles = userRoleRepository.findRoleNamesByEmpId(user.getEmpId());
+        
+        if (roles.isEmpty()) {
+            logger.error("No active roles found for user: {}", username);
+            throw new UsernameNotFoundException("No active roles found for user: " + username);
+        }
+        
+        logger.debug("User {} loaded with roles: {}", username, roles);
+        return UserDetailsImpl.build(user, roles);
+    }
+    
+    public List<String> getUserRoles(String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+        
+        return userRoleRepository.findRoleNamesByEmpId(user.getEmpId());
+    }
+    
+    public List<String> getUserDirectorates(String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+        
+        return userRoleRepository.findDirectoratesByEmpId(user.getEmpId());
+    }
+    
+    public User getUserByUsername(String username) {
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+    }
+}
+DirectorateService.java
+java
+package com.example.auth.service;
+
+import com.example.auth.repository.UserRepository;
+import com.example.auth.repository.UserRoleRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class DirectorateService {
+    
+    private static final Logger logger = LoggerFactory.getLogger(DirectorateService.class);
+    
+    @Autowired
+    private UserRepository userRepository;
+    
+    @Autowired
+    private UserRoleRepository userRoleRepository;
+    
+    public boolean isValidDirectorateForUser(String username, String directorate) {
+        return userRepository.findByUsername(username)
+                .map(user -> {
+                    boolean hasAccess = userRoleRepository.existsByEmpIdAndDirectorateAndIsActive(
+                            user.getEmpId(), directorate);
+                    logger.debug("User {} has access to directorate {}: {}", 
+                               username, directorate, hasAccess);
+                    return hasAccess;
+                })
+                .orElse(false);
+    }
+    
+    public List<String> getUserDirectorates(String username) {
+        return userRepository.findByUsername(username)
+                .map(user -> {
+                    List<String> directorates = userRoleRepository.findDirectoratesByEmpId(user.getEmpId());
+                    logger.debug("User {} has access to directorates: {}", username, directorates);
+                    return directorates;
+                })
+                .orElse(List.of());
+    }
+}
+DTOs
+JwtRequest.java
+java
+package com.example.auth.dto;
+
+import jakarta.validation.constraints.NotBlank;
+
+public class JwtRequest {
+    @NotBlank(message = "Username is required")
+    private String username;
+    
+    @NotBlank(message = "Password is required")
+    private String password;
+    
+    // Constructors
+    public JwtRequest() {}
+    
+    public JwtRequest(String username, String password) {
+        this.username = username;
+        this.password = password;
+    }
+    
+    // Getters and Setters
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+    
+    public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }
+}
+JwtResponse.java
+java
+package com.example.auth.dto;
+
+import java.util.List;
+
+public class JwtResponse {
+    private String token;
+    private String tempToken;
+    private String type = "Bearer";
+    private Long empId;
+    private String username;
+    private String email;
+    private List<String> roles;
+    private List<String> directorates;
+    private String selectedDirectorate;
+    private boolean requiresDirectorateSelection;
+    private String message;
+    
+    // Constructor for single directorate (direct login)
+    public JwtResponse(String token, Long empId, String username, String email, 
+                      List<String> roles, String selectedDirectorate) {
+        this.token = token;
+        this.empId = empId;
+        this.username = username;
+        this.email = email;
+        this.roles = roles;
+        this.selectedDirectorate = selectedDirectorate;
+        this.requiresDirectorateSelection = false;
+    }
+    
+    // Constructor for multiple directorates (requires selection)
+    public JwtResponse(String tempToken, Long empId, String username, String email,
+                      List<String> roles, List<String> directorates, String message) {
+        this.tempToken = tempToken;
+        this.empId = empId;
+        this.username = username;
+        this.email = email;
+        this.roles = roles;
+        this.directorates = directorates;
+        this.requiresDirectorateSelection = true;
+        this.message = message;
+    }
+    
+    // Getters and Setters
+    public String getToken() { return token; }
+    public void setToken(String token) { this.token = token; }
+    
+    public String getTempToken() { return tempToken; }
+    public void setTempToken(String tempToken) { this.tempToken = tempToken; }
+    
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
+    
+    public Long getEmpId() { return empId; }
+    public void setEmpId(Long empId) { this.empId = empId; }
+    
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+    
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+    
+    public List<String> getRoles() { return roles; }
+    public void setRoles(List<String> roles) { this.roles = roles; }
+    
+    public List<String> getDirectorates() { return directorates; }
+    public void setDirectorates(List<String> directorates) { this.directorates = directorates; }
+    
+    public String getSelectedDirectorate() { return selectedDirectorate; }
+    public void setSelectedDirectorate(String selectedDirectorate) { this.selectedDirectorate = selectedDirectorate; }
+    
+    public boolean isRequiresDirectorateSelection() { return requiresDirectorateSelection; }
+    public void setRequiresDirectorateSelection(boolean requiresDirectorateSelection) { 
+        this.requiresDirectorateSelection = requiresDirectorateSelection; 
+    }
+    
+    public String getMessage() { return message; }
+    public void setMessage(String message) { this.message = message; }
+}
+DirectorateSelectionRequest.java
+java
+package com.example.auth.dto;
+
+import jakarta.validation.constraints.NotBlank;
+
+public class DirectorateSelectionRequest {
+    @NotBlank(message = "Selected directorate is required")
+    private String selectedDirectorate;
+    
+    // Constructors
+    public DirectorateSelectionRequest() {}
+    
+    public DirectorateSelectionRequest(String selectedDirectorate) {
+        this.selectedDirectorate = selectedDirectorate;
+    }
+    
+    // Getters and Setters
+    public String getSelectedDirectorate() { return selectedDirectorate; }
+    public void setSelectedDirectorate(String selectedDirectorate) { this.selectedDirectorate = selectedDirectorate; }
+}
+MessageResponse.java
+java
+package com.example.auth.dto;
+
+public class MessageResponse {
+    private String message;
+    private String status;
+    private Object data;
+    
+    public MessageResponse(String message) {
+        this.message = message;
+        this.status = "success";
+    }
+    
+    public MessageResponse(String message, String status) {
+        this.message = message;
+        this.status = status;
+    }
+    
+    public MessageResponse(String message, String status, Object data) {
+        this.message = message;
+        this.status = status;
+        this.data = data;
+    }
+    
+    // Getters and Setters
+    public String getMessage() { return message; }
+    public void setMessage(String message) { this.message = message; }
+    
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    
+    public Object getData() { return data; }
+    public void setData(Object data) { this.data = data; }
+}
+Security Configuration
+SecurityConfig.java
+java
+package com.example.auth.config;
+
+import com.example.auth.service.JwtUserDetailsService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.Arrays;
+
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity(prePostEnabled = true)
+public class SecurityConfig {
+    
+    @Autowired
+    private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+    
+    @Autowired
+    private JwtRequestFilter jwtRequestFilter;
+    
+    @Autowired
+    private JwtUserDetailsService jwtUserDetailsService;
+    
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+    
+    @Bean
+    public DaoAuthenticationProvider authenticationProvider() {
+        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
+        authProvider.setUserDetailsService(jwtUserDetailsService);
+        authProvider.setPasswordEncoder(passwordEncoder());
+        return authProvider;
+    }
+    
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+        return config.getAuthenticationManager();
+    }
+    
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOriginPatterns(Arrays.asList("*"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(Arrays.asList("*"));
+        configuration.setAllowCredentials(true);
+        
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
+    
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http.cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .csrf(AbstractHttpConfigurer::disable)
+                .authorizeHttpRequests(authz -> authz
+                        .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/actuator/**").permitAll()
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        .requestMatchers("/api/td/**").hasRole("TD")
+                        .requestMatchers("/api/gd/**").hasRole("GD")
+                        .anyRequest().authenticated()
+                )
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
+        
+        http.authenticationProvider(authenticationProvider());
+        http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
+        
+        return http.build();
+    }
+}
+JwtAuthenticationEntryPoint.java
+java
+package com.example.auth.config;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.stereotype.Component;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+@Component
+public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
+    
+    private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationEntryPoint.class);
+    
+    @Override
+    public void commence(HttpServletRequest request, HttpServletResponse response,
+                         AuthenticationException authException) throws IOException {
+        
+        logger.error("Unauthorized error: {}", authException.getMessage());
+        
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        
+        final Map<String, Object> body = new HashMap<>();
+        body.put("status", HttpServletResponse.SC_UNAUTHORIZED);
+        body.put("error", "Unauthorized");
+        body.put("message", authException.getMessage());
+        body.put("path", request.getServletPath());
+        body.put("timestamp", System.currentTimeMillis());
+        
+        final ObjectMapper mapper = new ObjectMapper();
+        mapper.writeValue(response.getOutputStream(), body);
+    }
+}
+JwtRequestFilter.java
+java
+package com.example.auth.config;
+
+import com.example.auth.service.JwtUserDetailsService;
+import com.example.auth.service.JwtUtil;
+import io.jsonwebtoken.ExpiredJwtException;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
+
+@Component
+public class JwtRequestFilter extends OncePerRequestFilter {
+    
+    private static final Logger logger = LoggerFactory.getLogger(JwtRequestFilter.class);
+    
+    @Autowired
+    private JwtUserDetailsService jwtUserDetailsService;
+    
+    @Autowired
+    private JwtUtil jwtUtil;
+    
+    // Endpoints that allow temporary tokens
+    private static final List<String> TEMP_TOKEN_ALLOWED_ENDPOINTS = Arrays.asList(
+        "/api/auth/select-directorate",
+        "/api/auth/user-directorates"
+    );
+    
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, 
+                                    FilterChain chain) throws ServletException, IOException {
+        
+        final String requestTokenHeader = request.getHeader("Authorization");
+        final String requestURI = request.getRequestURI();
+        
+        String username = null;
+        String jwtToken = null;
+        
+        // Skip JWT validation for auth endpoints
+        if (requestURI.startsWith("/api/auth/") && !isTempTokenAllowedEndpoint(requestURI)) {
+            chain.doFilter(request, response);
+            return;
+        }
+        
+        if (requestTokenHeader != null && requestTokenHeader.startsWith("Bearer ")) {
+            jwtToken = requestTokenHeader.substring(7);
+            try {
+                username = jwtUtil.extractUsername(jwtToken);
+                
+                // Check if it's a temporary token being used on non-allowed endpoints
+                if (jwtUtil.isTempToken(jwtToken) && !isTempTokenAllowedEndpoint(requestURI)) {
+                    logger.warn("Temporary token used on non-allowed endpoint: {}", requestURI);
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.setContentType("application/json");
+                    response.getWriter().write("{\"error\":\"Please complete directorate selection first\",\"status\":401}");
+                    return;
+                }
+                
+            } catch (IllegalArgumentException e) {
+                logger.error("Unable to get JWT Token: {}", e.getMessage());
+            } catch (ExpiredJwtException e) {
+                logger.error("JWT Token has expired: {}", e.getMessage());
+            } catch (Exception e) {
+                logger.error("JWT Token validation error: {}", e.getMessage());
+            }
+        }
+        
+        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            try {
+                UserDetails userDetails = this.jwtUserDetailsService.loadUserByUsername(username);
+                
+                if (jwtUtil.validateToken(jwtToken, userDetails)) {
+                    UsernamePasswordAuthenticationToken authToken = 
+                            new UsernamePasswordAuthenticationToken(
+                                    userDetails, null, userDetails.getAuthorities());
+                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                    
+                    logger.debug("User {} authenticated successfully", username);
+                }
+            } catch (Exception e) {
+                logger.error("Error authenticating user {}: {}", username, e.getMessage());
+            }
+        }
+        
+        chain.doFilter(request, response);
+    }
+    
+    private boolean isTempTokenAllowedEndpoint(String requestURI) {
+        return TEMP_TOKEN_ALLOWED_ENDPOINTS.stream()
+                .anyMatch(requestURI::startsWith);
+    }
+}
+Controllers
+AuthController.java
+java
+package com.example.auth.controller;
+
+import com.example.auth.dto.DirectorateSelectionRequest;
+import com.example.auth.dto.JwtRequest;
+import com.example.auth.dto.JwtResponse;
+import com.example.auth.dto.MessageResponse;
+import com.example.auth.entity.User;
+import com.example.auth.service.DirectorateService;
+import com.example.auth.service.JwtUserDetailsService;
+import com.example.auth.service.JwtUtil;
+import com.example.auth.service.UserDetailsImpl;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/auth")
+@CrossOrigin(origins = "*", maxAge = 3600)
+public class AuthController {
+    
+    private static final Logger logger = LoggerFactory.getLogger(AuthController.class);
+    
+    @Autowired
+    private AuthenticationManager authenticationManager;
+    
+    @Autowired
+    private JwtUtil jwtUtil;
+    
+    @Autowired
+    private JwtUserDetailsService userDetailsService;
+    
+    @Autowired
+    private DirectorateService directorateService;
+    
+    @PostMapping("/signin")
+    public ResponseEntity<?> authenticateUser(@Valid @RequestBody JwtRequest loginRequest) {
+        try {
+            authenticate(loginRequest.getUsername(), loginRequest.getPassword());
+            
+            final UserDetails userDetails = userDetailsService.loadUserByUsername(loginRequest.getUsername());
+            final User user = userDetailsService.getUserByUsername(loginRequest.getUsername());
+            final List<String> roles = userDetailsService.getUserRoles(loginRequest.getUsername());
+            final List<String> directorates = userDetailsService.getUserDirectorates(loginRequest.getUsername());
+            
+            UserDetailsImpl userDetailsImpl = (UserDetailsImpl) userDetails;
+            
+            if (directorates.size() > 1) {
+                // Multiple directorates - require selection
+                final String tempToken = jwtUtil.generateTempToken(userDetails, roles, directorates);
+                return ResponseEntity.ok(new JwtResponse(tempToken, userDetailsImpl.getId(),
+                        user.getUsername(), user.getEmail(), roles, directorates, 
+                        "Please select a directorate to continue"));
+            } else {
+                // Single directorate - direct login
+                String selectedDirectorate = directorates.get(0);
+                final String token = jwtUtil.generateToken(userDetails, roles, selectedDirectorate);
+                return ResponseEntity.ok(new JwtResponse(token, userDetailsImpl.getId(),
+                        user.getUsername(), user.getEmail(), roles, selectedDirectorate));
+            }
+            
+        } catch (Exception e) {
+            logger.error("Authentication failed for user {}: {}", loginRequest.getUsername(), e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(new MessageResponse("Authentication failed: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @PostMapping("/select-directorate")
+    public ResponseEntity<?> selectDirectorate(@Valid @RequestBody DirectorateSelectionRequest request, 
+                                              HttpServletRequest httpRequest) {
+        try {
+            String tempToken = extractTokenFromRequest(httpRequest);
+            if (tempToken == null || !jwtUtil.isTempToken(tempToken)) {
+                return ResponseEntity.badRequest()
+                        .body(new MessageResponse("Invalid or missing temporary token", "error"));
+            }
+            
+            String username = jwtUtil.extractUsername(tempToken);
+            List<String> availableDirectorates = jwtUtil.extractDirectorates(tempToken);
+            List<String> roles = jwtUtil.extractRoles(tempToken);
+            
+            // Validate selected directorate
+            if (!availableDirectorates.contains(request.getSelectedDirectorate())) {
+                return ResponseEntity.badRequest()
+                        .body(new MessageResponse("Invalid directorate selection", "error"));
+            }
+            
+            // Verify user has access to selected directorate
+            if (!directorateService.isValidDirectorateForUser(username, request.getSelectedDirectorate())) {
+                return ResponseEntity.badRequest()
+                        .body(new MessageResponse("User does not have access to selected directorate", "error"));
+            }
+            
+            final UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+            final User user = userDetailsService.getUserByUsername(username);
+            final String finalToken = jwtUtil.generateToken(userDetails, roles, request.getSelectedDirectorate());
+            
+            UserDetailsImpl userDetailsImpl = (UserDetailsImpl) userDetails;
+            
+            return ResponseEntity.ok(new JwtResponse(finalToken, userDetailsImpl.getId(),
+                    user.getUsername(), user.getEmail(), roles, request.getSelectedDirectorate()));
+            
+        } catch (Exception e) {
+            logger.error("Directorate selection failed: {}", e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(new MessageResponse("Directorate selection failed: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @GetMapping("/user-directorates")
+    public ResponseEntity<?> getUserDirectorates(HttpServletRequest request) {
+        try {
+            String tempToken = extractTokenFromRequest(request);
+            if (tempToken == null || !jwtUtil.isTempToken(tempToken)) {
+                return ResponseEntity.badRequest()
+                        .body(new MessageResponse("Invalid or missing temporary token", "error"));
+            }
+            
+            String username = jwtUtil.extractUsername(tempToken);
+            List<String> directorates = directorateService.getUserDirectorates(username);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("username", username);
+            response.put("directorates", directorates);
+            
+            return ResponseEntity.ok(new MessageResponse("Directorates retrieved successfully", "success", response));
+            
+        } catch (Exception e) {
+            logger.error("Failed to get user directorates: {}", e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(new MessageResponse("Failed to get user directorates: " + e.getMessage(), "error"));
+        }
+    }
+    
+    private void authenticate(String username, String password) throws Exception {
+        try {
+            authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(username, password));
+        } catch (DisabledException e) {
+            throw new Exception("USER_DISABLED", e);
+        } catch (BadCredentialsException e) {
+            throw new Exception("INVALID_CREDENTIALS", e);
+        }
+    }
+    
+    private String extractTokenFromRequest(HttpServletRequest request) {
+        String bearerToken = request.getHeader("Authorization");
+        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
+            return bearerToken.substring(7);
+        }
+        return null;
+    }
+}
+UserController.java
+java
+package com.example.auth.controller;
+
+import com.example.auth.dto.MessageResponse;
+import com.example.auth.service.JwtUtil;
+import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api")
+@CrossOrigin(origins = "*", maxAge = 3600)
+public class UserController {
+    
+    private static final Logger logger = LoggerFactory.getLogger(UserController.class);
+    
+    @Autowired
+    private JwtUtil jwtUtil;
+    
+    @GetMapping("/test/all")
+    public ResponseEntity<?> allAccess() {
+        return ResponseEntity.ok(new MessageResponse("Public Content.", "success"));
+    }
+    
+    @GetMapping("/td/dashboard")
+    @PreAuthorize("hasRole('TD')")
+    public ResponseEntity<?> getTdDashboard(HttpServletRequest request) {
+        try {
+            String token = extractTokenFromRequest(request);
+            
+            if (jwtUtil.isTempToken(token)) {
+                return ResponseEntity.badRequest()
+                        .body(new MessageResponse("Please complete directorate selection first", "error"));
+            }
+            
+            String selectedDirectorate = jwtUtil.extractSelectedDirectorate(token);
+            String username = jwtUtil.extractUsername(token);
+            Long empId = jwtUtil.extractEmpId(token);
+            
+            Map<String, Object> dashboardData = new HashMap<>();
+            dashboardData.put("message", "Welcome to TD Dashboard");
+            dashboardData.put("empId", empId);
+            dashboardData.put("username", username);
+            dashboardData.put("selectedDirectorate", selectedDirectorate);
+            dashboardData.put("data", getTdDataForDirectorate(selectedDirectorate));
+            
+            logger.info("TD Dashboard accessed by user: {} for directorate: {}", username, selectedDirectorate);
+            
+            return ResponseEntity.ok(new MessageResponse("TD Dashboard data retrieved successfully", 
+                    "success", dashboardData));
+            
+        } catch (Exception e) {
+            logger.error("Error accessing TD dashboard: {}", e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(new MessageResponse("Error accessing TD dashboard: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @GetMapping("/gd/dashboard")
+    @PreAuthorize("hasRole('GD')")
+    public ResponseEntity<?> getGdDashboard(HttpServletRequest request) {
+        try {
+            String token = extractTokenFromRequest(request);
+            
+            if (jwtUtil.isTempToken(token)) {
+                return ResponseEntity.badRequest()
+                        .body(new MessageResponse("Please complete directorate selection first", "error"));
+            }
+            
+            String selectedDirectorate = jwtUtil.extractSelectedDirectorate(token);
+            String username = jwtUtil.extractUsername(token);
+            Long empId = jwtUtil.extractEmpId(token);
+            
+            Map<String, Object> dashboardData = new HashMap<>();
+            dashboardData.put("message", "Welcome to GD Dashboard");
+            dashboardData.put("empId", empId);
+            dashboardData.put("username", username);
+            dashboardData.put("selectedDirectorate", selectedDirectorate);
+            dashboardData.put("data", getGdDataForDirectorate(selectedDirectorate));
+            
+            logger.info("GD Dashboard accessed by user: {} for directorate: {}", username, selectedDirectorate);
+            
+            return ResponseEntity.ok(new MessageResponse("GD Dashboard data retrieved successfully", 
+                    "success", dashboardData));
+            
+        } catch (Exception e) {
+            logger.error("Error accessing GD dashboard: {}", e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(new MessageResponse("Error accessing GD dashboard: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @GetMapping("/user/profile")
+    public ResponseEntity<?> getUserProfile(HttpServletRequest request) {
+        try {
+            String token = extractTokenFromRequest(request);
+            
+            if (jwtUtil.isTempToken(token)) {
+                return ResponseEntity.badRequest()
+                        .body(new MessageResponse("Please complete directorate selection first", "error"));
+            }
+            
+            String username = jwtUtil.extractUsername(token);
+            List<String> roles = jwtUtil.extractRoles(token);
+            String selectedDirectorate = jwtUtil.extractSelectedDirectorate(token);
+            Long empId = jwtUtil.extractEmpId(token);
+            
+            Map<String, Object> profile = new HashMap<>();
+            profile.put("empId", empId);
+            profile.put("username", username);
+            profile.put("roles", roles);
+            profile.put("selectedDirectorate", selectedDirectorate);
+            
+            return ResponseEntity.ok(new MessageResponse("User profile retrieved successfully", 
+                    "success", profile));
+            
+        } catch (Exception e) {
+            logger.error("Error getting user profile: {}", e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(new MessageResponse("Error getting user profile: " + e.getMessage(), "error"));
+        }
+    }
+    
+    private String extractTokenFromRequest(HttpServletRequest request) {
+        String bearerToken = request.getHeader("Authorization");
+        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
+            return bearerToken.substring(7);
+        }
+        return null;
+    }
+    
+    private Map<String, Object> getTdDataForDirectorate(String directorate) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("reports", "TD reports for " + directorate);
+        data.put("projects", "TD projects in " + directorate);
+        data.put("teams", "TD teams under " + directorate);
+        data.put("analytics", "TD analytics for " + directorate + " directorate");
+        return data;
+    }
+    
+    private Map<String, Object> getGdDataForDirectorate(String directorate) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("overview", "GD overview for " + directorate);
+        data.put("statistics", "GD statistics in " + directorate);
+        data.put("operations", "GD operations under " + directorate);
+        data.put("performance", "GD performance metrics for " + directorate);
+        return data;
+    }
+}
+Database Setup Scripts
+MySQL Schema (schema-mysql.sql)
+sql
+-- Create database
+CREATE DATABASE IF NOT EXISTS jwt_auth_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE jwt_auth_db;
+
+-- Create roles table
+CREATE TABLE IF NOT EXISTS roles (
+    role_no INT PRIMARY KEY,
+    role_name VARCHAR(50) NOT NULL UNIQUE
+);
+
+-- Create users table
+CREATE TABLE IF NOT EXISTS users (
+    emp_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    first_name VARCHAR(50),
+    last_name VARCHAR(50),
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    account_non_expired BOOLEAN NOT NULL DEFAULT TRUE,
+    account_non_locked BOOLEAN NOT NULL DEFAULT TRUE,
+    credentials_non_expired BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Create user_roles table
+CREATE TABLE IF NOT EXISTS user_roles (
+    emp_id BIGINT NOT NULL,
+    role_no INT NOT NULL,
+    role_name VARCHAR(50) NOT NULL,
+    directorate VARCHAR(10) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    PRIMARY KEY (emp_id, role_no, directorate),
+    FOREIGN KEY (emp_id) REFERENCES users(emp_id) ON DELETE CASCADE,
+    FOREIGN KEY (role_no) REFERENCES roles(role_no) ON DELETE CASCADE
+);
+
+-- Create indexes
+CREATE INDEX idx_users_username ON users(username);
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_user_roles_emp_id ON user_roles(emp_id);
+CREATE INDEX idx_user_roles_directorate ON user_roles(directorate);
+CREATE INDEX idx_user_roles_active ON user_roles(is_active);
+Oracle Schema (schema-oracle.sql)
+sql
+-- Create user and grant privileges (run as system user)
+-- CREATE USER jwt_user IDENTIFIED BY password;
+-- GRANT CONNECT, RESOURCE, CREATE SESSION TO jwt_user;
+-- GRANT CREATE TABLE, CREATE VIEW, CREATE PROCEDURE TO jwt_user;
+
+-- Connect as jwt_user
+
+-- Create sequence for users
+CREATE SEQUENCE users_seq
+    START WITH 1
+    INCREMENT BY 1
+    NOCACHE
+    NOCYCLE;
+
+-- Create roles table
+CREATE TABLE roles (
+    role_no NUMBER(10) PRIMARY KEY,
+    role_name VARCHAR2(50) NOT NULL UNIQUE
+);
+
+-- Create users table
+CREATE TABLE users (
+    emp_id NUMBER(19) PRIMARY KEY,
+    username VARCHAR2(50) NOT NULL UNIQUE,
+    email VARCHAR2(100) NOT NULL UNIQUE,
+    password VARCHAR2(255) NOT NULL,
+    first_name VARCHAR2(50),
+    last_name VARCHAR2(50),
+    enabled NUMBER(1) DEFAULT 1 NOT NULL CHECK (enabled IN (0,1)),
+    account_non_expired NUMBER(1) DEFAULT 1 NOT NULL CHECK (account_non_expired IN (0,1)),
+    account_non_locked NUMBER(1) DEFAULT 1 NOT NULL CHECK (account_non_locked IN (0,1)),
+    credentials_non_expired NUMBER(1) DEFAULT 1 NOT NULL CHECK (credentials_non_expired IN (0,1)),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create user_roles table
+CREATE TABLE user_roles (
+    emp_id NUMBER(19) NOT NULL,
+    role_no NUMBER(10) NOT NULL,
+    role_name VARCHAR2(50) NOT NULL,
+    directorate VARCHAR2(10) NOT NULL,
+    is_active NUMBER(1) DEFAULT 1 NOT NULL CHECK (is_active IN (0,1)),
+    PRIMARY KEY (emp_id, role_no, directorate),
+    FOREIGN KEY (emp_id) REFERENCES users(emp_id) ON DELETE CASCADE,
+    FOREIGN KEY (role_no) REFERENCES roles(role_no) ON DELETE CASCADE
+);
+
+-- Create trigger for auto-increment emp_id
+CREATE OR REPLACE TRIGGER users_trigger
+    BEFORE INSERT ON users
+    FOR EACH ROW
+BEGIN
+    IF :new.emp_id IS NULL THEN
+        :new.emp_id := users_seq.NEXTVAL;
+    END IF;
+END;
+
+-- Create trigger for updated_at
+CREATE OR REPLACE TRIGGER users_updated_at_trigger
+    BEFORE UPDATE ON users
+    FOR EACH ROW
+BEGIN
+    :new.updated_at := CURRENT_TIMESTAMP;
+END;
+
+-- Create indexes
+CREATE INDEX idx_users_username ON users(username);
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_user_roles_emp_id ON user_roles(emp_id);
+CREATE INDEX idx_user_roles_directorate ON user_roles(directorate);
+CREATE INDEX idx_user_roles_active ON user_roles(is_active);
+Sample Data (data.sql)
+sql
+-- Insert roles
+INSERT INTO roles (role_no, role_name) VALUES (10, 'TD');
+INSERT INTO roles (role_no, role_name) VALUES (15, 'GD');
+
+-- Insert users (password is 'password123' encoded with BCrypt)
+INSERT INTO users (username, email, password, first_name, last_name) VALUES 
+('user1', 'user1@example.com', '$2a$10$slYQmyNdGzTn7ZLBXBChFOC9f6kFjAqPhccnP6DxlWXx2lPk1C3G6', 'John', 'Doe');
+
+INSERT INTO users (username, email, password, first_name, last_name) VALUES 
+('user2', 'user2@example.com', '$2a$10$slYQmyNdGzTn7ZLBXBChFOC9f6kFjAqPhccnP6DxlWXx2lPk1C3G6', 'Jane', 'Smith');
+
+INSERT INTO users (username, email, password, first_name, last_name) VALUES 
+('admin', 'admin@example.com', '$2a$10$slYQmyNdGzTn7ZLBXBChFOC9f6kFjAqPhccnP6DxlWXx2lPk1C3G6', 'Admin', 'User');
+
+-- Insert user roles
+-- user1 has TD role in multiple directorates
+INSERT INTO user_roles (emp_id, role_no, role_name, directorate, is_active) VALUES (1, 10, 'TD', 'SDD', 1);
+INSERT INTO user_roles (emp_id, role_no, role_name, directorate, is_active) VALUES (1, 10, 'TD', 'CND', 1);
+
+-- user2 has GD role in single directorate
+INSERT INTO user_roles (emp_id, role_no, role_name, directorate, is_active) VALUES (2, 15, 'GD', 'SDD', 1);
+
+-- admin has both roles in multiple directorates
+INSERT INTO user_roles (emp_id, role_no, role_name, directorate, is_active) VALUES (3, 10, 'TD', 'SDD', 1);
+INSERT INTO user_roles (emp_id, role_no, role_name, directorate, is_active) VALUES (3, 15, 'GD', 'CND', 1);
+Main Application Class
+AuthApplication.java
+java
+package com.example.auth;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class AuthApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(AuthApplication.class, args);
+    }
+}
+API Usage Examples
+1. Login (Multiple Directorates)
+bash
+curl -X POST http://localhost:8080/api/auth/signin \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "user1",
+    "password": "password123"
+  }'
+Response:
+
+json
+{
+  "tempToken": "eyJhbGciOiJIUzI1NiJ9...",
+  "empId": 1,
+  "username": "user1",
+  "email": "user1@example.com",
+  "roles": ["TD"],
+  "directorates": ["SDD", "CND"],
+  "requiresDirectorateSelection": true,
+  "message": "Please select a directorate to continue"
+}
+2. Directorate Selection
+bash
+curl -X POST http://localhost:8080/api/auth/select-directorate \
+  -H "Authorization: Bearer TEMP_TOKEN_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "selectedDirectorate": "SDD"
+  }'
+3. Access Dashboard
+bash
+curl -X GET http://localhost:8080/api/td/dashboard \
+  -H "Authorization: Bearer FINAL_TOKEN_HERE"
+Running the Application
+For MySQL:
+Start MySQL and create database
+
+Set active profile to mysql in application.yml
+
+Run application: mvn spring-boot:run
+
+For Oracle:
+Start Oracle 21c and create user
+
+Set active profile to oracle in application.yml
+
+Run application: mvn spring-boot:run -Dspring.profiles.active=oracle
+
+The application will:
+
+Auto-create tables based on JPA entities
+
+Load sample data from data.sql
+
+Support both databases with appropriate configurations
+
+Handle directorate selection workflow seamlessly
+
+==============================================================================================================================
+# Complete Class Structure and Usage Explanation
+
+Let me explain each class in the Spring Boot JWT authentication system and why we use them:
+
+## 1. Entity Classes (Data Model)
+
+### Role.java
+**Purpose**: Represents the roles table in database
+```java
+@Entity
+@Table(name = "roles")
+public class Role {
+    @Id
+    @Column(name = "role_no")
+    private Integer roleNo;  // Primary key
+    
+    @Column(name = "role_name")
+    private String roleName; // Role name like "TD", "GD"
+}
+```
+**Why we use it**: 
+- Maps to database `roles` table
+- Stores master role definitions (TD=10, GD=15)
+- JPA entity for ORM mapping
+
+### User.java
+**Purpose**: Represents the users table in database
+```java
+@Entity
+@Table(name = "users")
+public class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long empId;        // Auto-generated primary key
+    
+    private String username;   // Unique username
+    private String email;      // Unique email
+    private String password;   // Encrypted password
+    private Boolean enabled;   // Account status
+    // ... other fields
+}
+```
+**Why we use it**:
+- Maps to database `users` table
+- Stores user account information
+- Contains authentication credentials
+- Supports account status tracking
+
+### UserRole.java
+**Purpose**: Represents the user_roles table (many-to-many relationship)
+```java
+@Entity
+@Table(name = "user_roles")
+@IdClass(UserRoleId.class)
+public class UserRole {
+    @Id private Long empId;         // Foreign key to users
+    @Id private Integer roleNo;     // Foreign key to roles
+    @Id private String directorate; // Directorate assignment
+    
+    private String roleName;        // Denormalized role name
+    private Boolean isActive;       // Active status
+}
+```
+**Why we use it**:
+- Handles many-to-many relationship between users and roles
+- Supports multiple directorates per user
+- Composite primary key for unique combinations
+- Allows role-directorate specific assignments
+
+### UserRoleId.java
+**Purpose**: Composite primary key for UserRole entity
+```java
+public class UserRoleId implements Serializable {
+    private Long empId;
+    private Integer roleNo;
+    private String directorate;
+    // equals() and hashCode() methods
+}
+```
+**Why we use it**:
+- Required for composite primary keys in JPA
+- Ensures uniqueness of (empId, roleNo, directorate) combination
+- Implements Serializable for JPA requirements
+
+## 2. Repository Interfaces (Data Access Layer)
+
+### UserRepository.java
+**Purpose**: Data access operations for User entity
+```java
+@Repository
+public interface UserRepository extends JpaRepository<User, Long> {
+    Optional<User> findByUsername(String username);
+    Optional<User> findByEmail(String email);
+    Boolean existsByUsername(String username);
+    // Custom query methods
+}
+```
+**Why we use it**:
+- Provides CRUD operations for User entity
+- Custom finder methods for authentication
+- Leverages Spring Data JPA auto-implementation
+- Type-safe database operations
+
+### UserRoleRepository.java
+**Purpose**: Data access operations for UserRole entity
+```java
+@Repository
+public interface UserRoleRepository extends JpaRepository<UserRole, UserRoleId> {
+    List<UserRole> findByEmpId(Long empId);
+    List<String> findDirectoratesByEmpId(Long empId);
+    Boolean existsByEmpIdAndDirectorateAndIsActive(Long empId, String directorate);
+    // Custom queries for role and directorate retrieval
+}
+```
+**Why we use it**:
+- Manages user-role-directorate relationships
+- Custom queries for authorization logic
+- Supports directorate-specific data retrieval
+
+### RoleRepository.java
+**Purpose**: Data access operations for Role entity
+```java
+@Repository
+public interface RoleRepository extends JpaRepository<Role, Integer> {
+    Optional<Role> findByRoleName(String roleName);
+    Boolean existsByRoleName(String roleName);
+}
+```
+**Why we use it**:
+- Basic CRUD operations for roles
+- Role validation and lookup operations
+
+## 3. Service Classes (Business Logic Layer)
+
+### JwtUtil.java
+**Purpose**: JWT token creation, parsing, and validation
+```java
+@Component
+public class JwtUtil {
+    public String generateToken(UserDetails userDetails, List<String> roles, String selectedDirectorate);
+    public String generateTempToken(UserDetails userDetails, List<String> roles, List<String> directorates);
+    public String extractUsername(String token);
+    public Boolean validateToken(String token, UserDetails userDetails);
+    // Token manipulation methods
+}
+```
+**Why we use it**:
+- Centralizes JWT operations
+- Handles both temporary and final tokens
+- Extracts claims from tokens
+- Validates token integrity and expiration
+
+### UserDetailsImpl.java
+**Purpose**: Custom implementation of Spring Security's UserDetails
+```java
+public class UserDetailsImpl implements UserDetails {
+    private Long id;
+    private String username;
+    private String password;
+    private Collection<? extends GrantedAuthority> authorities;
+    // UserDetails interface methods
+}
+```
+**Why we use it**:
+- Bridges our User entity with Spring Security
+- Provides user information for authentication
+- Implements Spring Security's UserDetails contract
+- Adds custom fields like empId
+
+### JwtUserDetailsService.java
+**Purpose**: Loads user details for authentication
+```java
+@Service
+public class JwtUserDetailsService implements UserDetailsService {
+    @Override
+    public UserDetails loadUserByUsername(String username) {
+        // Load user from database
+        // Get user roles
+        // Return UserDetailsImpl
+    }
+}
+```
+**Why we use it**:
+- Implements Spring Security's UserDetailsService
+- Loads user data from database during authentication
+- Retrieves user roles and authorities
+- Required by Spring Security authentication process
+
+### DirectorateService.java
+**Purpose**: Business logic for directorate operations
+```java
+@Service
+public class DirectorateService {
+    public boolean isValidDirectorateForUser(String username, String directorate);
+    public List<String> getUserDirectorates(String username);
+}
+```
+**Why we use it**:
+- Validates directorate access permissions
+- Retrieves user's available directorates
+- Separates directorate logic from controllers
+
+## 4. Configuration Classes (Security Setup)
+
+### SecurityConfig.java
+**Purpose**: Spring Security configuration
+```java
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity
+public class SecurityConfig {
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http);
+    @Bean
+    public PasswordEncoder passwordEncoder();
+    @Bean
+    public AuthenticationManager authenticationManager();
+}
+```
+**Why we use it**:
+- Configures Spring Security settings
+- Defines URL access rules
+- Sets up authentication providers
+- Configures JWT filter chain
+
+### JwtAuthenticationEntryPoint.java
+**Purpose**: Handles authentication failures
+```java
+@Component
+public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
+    @Override
+    public void commence(HttpServletRequest request, HttpServletResponse response,
+                         AuthenticationException authException) {
+        // Return JSON error response
+    }
+}
+```
+**Why we use it**:
+- Customizes authentication error responses
+- Returns JSON instead of default HTML error pages
+- Provides consistent API error format
+
+### JwtRequestFilter.java
+**Purpose**: Intercepts requests to validate JWT tokens
+```java
+@Component
+public class JwtRequestFilter extends OncePerRequestFilter {
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, 
+                                    FilterChain chain) {
+        // Extract JWT token from header
+        // Validate token
+        // Set authentication context
+    }
+}
+```
+**Why we use it**:
+- Validates JWT tokens on each request
+- Sets Spring Security authentication context
+- Handles temporary token restrictions
+- Runs before Spring Security's authentication filters
+
+## 5. DTO Classes (Data Transfer Objects)
+
+### JwtRequest.java
+**Purpose**: Login request payload
+```java
+public class JwtRequest {
+    @NotBlank
+    private String username;
+    @NotBlank
+    private String password;
+}
+```
+**Why we use it**:
+- Validates login input
+- Separates API contract from entity structure
+- Provides clean request structure
+
+### JwtResponse.java
+**Purpose**: Authentication response payload
+```java
+public class JwtResponse {
+    private String token;           // Final JWT token
+    private String tempToken;       // Temporary token for directorate selection
+    private String username;
+    private List<String> roles;
+    private List<String> directorates;
+    private boolean requiresDirectorateSelection;
+}
+```
+**Why we use it**:
+- Provides structured authentication response
+- Handles both single and multi-directorate scenarios
+- Separates internal data from API response
+
+### DirectorateSelectionRequest.java
+**Purpose**: Directorate selection payload
+```java
+public class DirectorateSelectionRequest {
+    @NotBlank
+    private String selectedDirectorate;
+}
+```
+**Why we use it**:
+- Validates directorate selection input
+- Clean API contract for directorate selection
+
+### MessageResponse.java
+**Purpose**: Generic API response wrapper
+```java
+public class MessageResponse {
+    private String message;
+    private String status;
+    private Object data;
+}
+```
+**Why we use it**:
+- Provides consistent API response format
+- Wraps success/error messages
+- Standardizes response structure
+
+## 6. Controller Classes (API Endpoints)
+
+### AuthController.java
+**Purpose**: Authentication and authorization endpoints
+```java
+@RestController
+@RequestMapping("/api/auth")
+public class AuthController {
+    @PostMapping("/signin")          // Login endpoint
+    @PostMapping("/select-directorate") // Directorate selection
+    @GetMapping("/user-directorates")   // Get available directorates
+}
+```
+**Why we use it**:
+- Handles authentication workflow
+- Manages directorate selection process
+- Provides public authentication endpoints
+- Validates and processes login requests
+
+### UserController.java
+**Purpose**: Protected resource endpoints
+```java
+@RestController
+@RequestMapping("/api")
+public class UserController {
+    @GetMapping("/td/dashboard")    // TD role dashboard
+    @GetMapping("/gd/dashboard")    // GD role dashboard
+    @GetMapping("/user/profile")    // User profile
+}
+```
+**Why we use it**:
+- Provides role-based protected endpoints
+- Demonstrates directorate-specific access
+- Shows JWT token usage in protected resources
+
+## 7. Main Application Class
+
+### AuthApplication.java
+**Purpose**: Spring Boot application entry point
+```java
+@SpringBootApplication
+public class AuthApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(AuthApplication.class, args);
+    }
+}
+```
+**Why we use it**:
+- Bootstraps Spring Boot application
+- Enables auto-configuration
+- Entry point for application startup
+
+## Class Interaction Flow
+
+```
+1. User Login Request → AuthController
+2. AuthController → AuthenticationManager (Spring Security)
+3. AuthenticationManager → JwtUserDetailsService
+4. JwtUserDetailsService → UserRepository + UserRoleRepository
+5. If multiple directorates → Generate temp token
+6. User selects directorate → AuthController
+7. AuthController → DirectorateService (validation)
+8. Generate final JWT token → JwtUtil
+9. Protected resource access → JwtRequestFilter
+10. JwtRequestFilter → JwtUtil (token validation)
+11. Access granted → UserController
+```
+
+Each class has a specific responsibility in the authentication and authorization workflow, following separation of concerns and Spring Boot best practices.
+
+===============================================================
+
+
+# React Frontend for JWT Authentication with Directorate Selection (Node.js 22 + Ant Design)
+
+## Project Setup
+
+### 1. Initialize React Project
+```bash
+npx create-react-app jwt-auth-frontend
+cd jwt-auth-frontend
+
+# Install dependencies
+npm install antd axios react-router-dom @ant-design/icons
+npm install @types/node --save-dev  # For Node.js 22 compatibility
+```
+
+### 2. Package.json Configuration
+```json
+{
+  "name": "jwt-auth-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@ant-design/icons": "^5.3.0",
+    "@testing-library/jest-dom": "^5.16.4",
+    "@testing-library/react": "^13.3.0",
+    "@testing-library/user-event": "^13.5.0",
+    "antd": "^5.12.0",
+    "axios": "^1.6.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.8.0",
+    "react-scripts": "5.0.1",
+    "web-vitals": "^2.1.4"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}
+```
+
+## Project Structure
+
+```
+src/
+├── components/
+│   ├── Login.jsx
+│   ├── DirectorateSelection.jsx
+│   ├── Dashboard.jsx
+│   ├── TDDashboard.jsx
+│   ├── GDDashboard.jsx
+│   ├── Profile.jsx
+│   └── PrivateRoute.jsx
+├── services/
+│   ├── api.js
+│   ├── authService.js
+│   └── tokenService.js
+├── context/
+│   └── AuthContext.jsx
+├── utils/
+│   └── constants.js
+├── styles/
+│   └── App.css
+├── App.js
+└── index.js
+```
+
+## Service Files
+
+### 1. src/services/api.js
+```javascript
+import axios from 'axios';
+import { tokenService } from './tokenService';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080/api';
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Request interceptor to add token
+api.interceptors.request.use(
+  (config) => {
+    const token = tokenService.getToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Response interceptor to handle errors
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      tokenService.removeToken();
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default api;
+```
+
+### 2. src/services/tokenService.js
+```javascript
+class TokenService {
+  getToken() {
+    return localStorage.getItem('authToken');
+  }
+
+  getTempToken() {
+    return localStorage.getItem('tempToken');
+  }
+
+  setToken(token) {
+    localStorage.setItem('authToken', token);
+  }
+
+  setTempToken(token) {
+    localStorage.setItem('tempToken', token);
+  }
+
+  removeToken() {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('tempToken');
+    localStorage.removeItem('selectedDirectorate');
+    localStorage.removeItem('userInfo');
+  }
+
+  getUserInfo() {
+    const userInfo = localStorage.getItem('userInfo');
+    return userInfo ? JSON.parse(userInfo) : null;
+  }
+
+  setUserInfo(userInfo) {
+    localStorage.setItem('userInfo', JSON.stringify(userInfo));
+  }
+
+  getSelectedDirectorate() {
+    return localStorage.getItem('selectedDirectorate');
+  }
+
+  setSelectedDirectorate(directorate) {
+    localStorage.setItem('selectedDirectorate', directorate);
+  }
+
+  isAuthenticated() {
+    const token = this.getToken();
+    if (!token) return false;
+    
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.exp > Date.now() / 1000;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  hasDirectorateSelected() {
+    return !!this.getSelectedDirectorate() && this.isAuthenticated();
+  }
+}
+
+export const tokenService = new TokenService();
+```
+
+### 3. src/services/authService.js
+```javascript
+import api from './api';
+import { tokenService } from './tokenService';
+
+class AuthService {
+  async login(username, password) {
+    try {
+      const response = await api.post('/auth/signin', {
+        username,
+        password
+      });
+      
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Login failed' };
+    }
+  }
+
+  async selectDirectorate(selectedDirectorate) {
+    try {
+      const tempToken = tokenService.getTempToken();
+      const response = await api.post('/auth/select-directorate', 
+        { selectedDirectorate },
+        { 
+          headers: { 
+            Authorization: `Bearer ${tempToken}` 
+          } 
+        }
+      );
+      
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Directorate selection failed' };
+    }
+  }
+
+  async getUserDirectorates() {
+    try {
+      const tempToken = tokenService.getTempToken();
+      const response = await api.get('/auth/user-directorates', {
+        headers: { 
+          Authorization: `Bearer ${tempToken}` 
+        }
+      });
+      
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to get directorates' };
+    }
+  }
+
+  async getTDDashboard() {
+    try {
+      const response = await api.get('/td/dashboard');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to get TD dashboard' };
+    }
+  }
+
+  async getGDDashboard() {
+    try {
+      const response = await api.get('/gd/dashboard');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to get GD dashboard' };
+    }
+  }
+
+  async getUserProfile() {
+    try {
+      const response = await api.get('/user/profile');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to get user profile' };
+    }
+  }
+
+  logout() {
+    tokenService.removeToken();
+  }
+}
+
+export const authService = new AuthService();
+```
+
+## Context
+
+### 4. src/context/AuthContext.jsx
+```jsx
+import React, { createContext, useContext, useReducer, useEffect } from 'react';
+import { tokenService } from '../services/tokenService';
+
+const AuthContext = createContext();
+
+const initialState = {
+  isAuthenticated: false,
+  user: null,
+  selectedDirectorate: null,
+  requiresDirectorateSelection: false,
+  availableDirectorates: [],
+  loading: false
+};
+
+function authReducer(state, action) {
+  switch (action.type) {
+    case 'LOGIN_START':
+      return { ...state, loading: true };
+    case 'LOGIN_SUCCESS':
+      return {
+        ...state,
+        loading: false,
+        isAuthenticated: true,
+        user: action.payload.user,
+        selectedDirectorate: action.payload.selectedDirectorate,
+        requiresDirectorateSelection: false
+      };
+    case 'LOGIN_REQUIRES_DIRECTORATE':
+      return {
+        ...state,
+        loading: false,
+        user: action.payload.user,
+        availableDirectorates: action.payload.directorates,
+        requiresDirectorateSelection: true
+      };
+    case 'DIRECTORATE_SELECTED':
+      return {
+        ...state,
+        isAuthenticated: true,
+        selectedDirectorate: action.payload.selectedDirectorate,
+        requiresDirectorateSelection: false
+      };
+    case 'LOGOUT':
+      return { ...initialState };
+    case 'SET_LOADING':
+      return { ...state, loading: action.payload };
+    default:
+      return state;
+  }
+}
+
+export function AuthProvider({ children }) {
+  const [state, dispatch] = useReducer(authReducer, initialState);
+
+  useEffect(() => {
+    // Check if user is already authenticated on app load
+    if (tokenService.hasDirectorateSelected()) {
+      const userInfo = tokenService.getUserInfo();
+      const selectedDirectorate = tokenService.getSelectedDirectorate();
+      
+      if (userInfo && selectedDirectorate) {
+        dispatch({
+          type: 'LOGIN_SUCCESS',
+          payload: {
+            user: userInfo,
+            selectedDirectorate
+          }
+        });
+      }
+    }
+  }, []);
+
+  const login = (loginResponse) => {
+    if (loginResponse.requiresDirectorateSelection) {
+      tokenService.setTempToken(loginResponse.tempToken);
+      tokenService.setUserInfo({
+        empId: loginResponse.empId,
+        username: loginResponse.username,
+        email: loginResponse.email,
+        roles: loginResponse.roles
+      });
+      
+      dispatch({
+        type: 'LOGIN_REQUIRES_DIRECTORATE',
+        payload: {
+          user: {
+            empId: loginResponse.empId,
+            username: loginResponse.username,
+            email: loginResponse.email,
+            roles: loginResponse.roles
+          },
+          directorates: loginResponse.directorates
+        }
+      });
+    } else {
+      tokenService.setToken(loginResponse.token);
+      tokenService.setSelectedDirectorate(loginResponse.selectedDirectorate);
+      tokenService.setUserInfo({
+        empId: loginResponse.empId,
+        username: loginResponse.username,
+        email: loginResponse.email,
+        roles: loginResponse.roles
+      });
+      
+      dispatch({
+        type: 'LOGIN_SUCCESS',
+        payload: {
+          user: {
+            empId: loginResponse.empId,
+            username: loginResponse.username,
+            email: loginResponse.email,
+            roles: loginResponse.roles
+          },
+          selectedDirectorate: loginResponse.selectedDirectorate
+        }
+      });
+    }
+  };
+
+  const selectDirectorate = (directorateResponse) => {
+    tokenService.setToken(directorateResponse.token);
+    tokenService.setSelectedDirectorate(directorateResponse.selectedDirectorate);
+    
+    dispatch({
+      type: 'DIRECTORATE_SELECTED',
+      payload: {
+        selectedDirectorate: directorateResponse.selectedDirectorate
+      }
+    });
+  };
+
+  const logout = () => {
+    tokenService.removeToken();
+    dispatch({ type: 'LOGOUT' });
+  };
+
+  const setLoading = (loading) => {
+    dispatch({ type: 'SET_LOADING', payload: loading });
+  };
+
+  return (
+    <AuthContext.Provider value={{
+      ...state,
+      login,
+      selectDirectorate,
+      logout,
+      setLoading
+    }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+```
+
+## Components
+
+### 5. src/components/Login.jsx
+```jsx
+import React, { useState } from 'react';
+import { Form, Input, Button, Card, message, Spin } from 'antd';
+import { UserOutlined, LockOutlined } from '@ant-design/icons';
+import { useAuth } from '../context/AuthContext';
+import { authService } from '../services/authService';
+import { useNavigate } from 'react-router-dom';
+
+const Login = () => {
+  const [form] = Form.useForm();
+  const { login, setLoading, loading } = useAuth();
+  const navigate = useNavigate();
+
+  const onFinish = async (values) => {
+    try {
+      setLoading(true);
+      const response = await authService.login(values.username, values.password);
+      
+      login(response);
+      
+      if (response.requiresDirectorateSelection) {
+        message.success('Login successful! Please select your directorate.');
+        navigate('/select-directorate');
+      } else {
+        message.success('Login successful!');
+        navigate('/dashboard');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      message.error(error.message || 'Login failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+    }}>
+      <Card
+        title="Login"
+        style={{
+          width: 400,
+          boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+          borderRadius: '10px'
+        }}
+      >
+        <Spin spinning={loading}>
+          <Form
+            form={form}
+            name="login"
+            onFinish={onFinish}
+            autoComplete="off"
+            layout="vertical"
+          >
+            <Form.Item
+              name="username"
+              rules={[
+                { required: true, message: 'Please input your username!' },
+                { min: 3, message: 'Username must be at least 3 characters!' }
+              ]}
+            >
+              <Input 
+                prefix={<UserOutlined />} 
+                placeholder="Username" 
+                size="large"
+              />
+            </Form.Item>
+
+            <Form.Item
+              name="password"
+              rules={[
+                { required: true, message: 'Please input your password!' },
+                { min: 6, message: 'Password must be at least 6 characters!' }
+              ]}
+            >
+              <Input.Password 
+                prefix={<LockOutlined />} 
+                placeholder="Password" 
+                size="large"
+              />
+            </Form.Item>
+
+            <Form.Item>
+              <Button 
+                type="primary" 
+                htmlType="submit" 
+                size="large"
+                style={{ width: '100%' }}
+                loading={loading}
+              >
+                Log in
+              </Button>
+            </Form.Item>
+          </Form>
+        </Spin>
+      </Card>
+    </div>
+  );
+};
+
+export default Login;
+```
+
+### 6. src/components/DirectorateSelection.jsx
+```jsx
+import React, { useState, useEffect } from 'react';
+import { Card, Button, List, message, Spin, Typography } from 'antd';
+import { BankOutlined, ArrowRightOutlined } from '@ant-design/icons';
+import { useAuth } from '../context/AuthContext';
+import { authService } from '../services/authService';
+import { useNavigate } from 'react-router-dom';
+
+const { Title, Text } = Typography;
+
+const DirectorateSelection = () => {
+  const { user, availableDirectorates, selectDirectorate, setLoading, loading } = useAuth();
+  const [selectedDirectorate, setSelectedDirectorate] = useState(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!user || availableDirectorates.length === 0) {
+      navigate('/login');
+    }
+  }, [user, availableDirectorates, navigate]);
+
+  const handleDirectorateSelect = (directorate) => {
+    setSelectedDirectorate(directorate);
+  };
+
+  const handleContinue = async () => {
+    if (!selectedDirectorate) {
+      message.warning('Please select a directorate to continue.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await authService.selectDirectorate(selectedDirectorate);
+      
+      selectDirectorate(response);
+      message.success(`Access granted to ${selectedDirectorate} directorate!`);
+      navigate('/dashboard');
+    } catch (error) {
+      console.error('Directorate selection error:', error);
+      message.error(error.message || 'Failed to select directorate. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!user) {
+    return null;
+  }
+
+  return (
+    <div style={{
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      padding: '20px'
+    }}>
+      <Card
+        style={{
+          width: 500,
+          boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+          borderRadius: '10px'
+        }}
+      >
+        <Spin spinning={loading}>
+          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+            <Title level={3}>Welcome, {user.username}!</Title>
+            <Text type="secondary">
+              You have access to multiple directorates. Please select one to continue.
+            </Text>
+          </div>
+
+          <List
+            header={<Text strong>Available Directorates:</Text>}
+            bordered
+            dataSource={availableDirectorates}
+            renderItem={(directorate) => (
+              <List.Item
+                style={{
+                  cursor: 'pointer',
+                  backgroundColor: selectedDirectorate === directorate ? '#e6f7ff' : 'white',
+                  border: selectedDirectorate === directorate ? '2px solid #1890ff' : '1px solid #d9d9d9'
+                }}
+                onClick={() => handleDirectorateSelect(directorate)}
+              >
+                <List.Item.Meta
+                  avatar={<BankOutlined style={{ fontSize: '18px', color: '#1890ff' }} />}
+                  title={directorate}
+                  description={`Access ${directorate} directorate resources`}
+                />
+                {selectedDirectorate === directorate && (
+                  <ArrowRightOutlined style={{ color: '#1890ff' }} />
+                )}
+              </List.Item>
+            )}
+          />
+
+          <div style={{ marginTop: '24px', textAlign: 'center' }}>
+            <Button
+              type="primary"
+              size="large"
+              onClick={handleContinue}
+              disabled={!selectedDirectorate}
+              loading={loading}
+              style={{ minWidth: '120px' }}
+            >
+              Continue
+            </Button>
+          </div>
+        </Spin>
+      </Card>
+    </div>
+  );
+};
+
+export default DirectorateSelection;
+```
+
+### 7. src/components/Dashboard.jsx
+```jsx
+import React, { useEffect } from 'react';
+import { Layout, Menu, Button, Dropdown, Avatar, message } from 'antd';
+import { 
+  UserOutlined, 
+  LogoutOutlined, 
+  DashboardOutlined,
+  ProfileOutlined
+} from '@ant-design/icons';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate, Outlet, useLocation } from 'react-router-dom';
+
+const { Header, Sider, Content } = Layout;
+
+const Dashboard = () => {
+  const { user, selectedDirectorate, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!user || !selectedDirectorate) {
+      navigate('/login');
+    }
+  }, [user, selectedDirectorate, navigate]);
+
+  const handleLogout = () => {
+    logout();
+    message.success('Logged out successfully!');
+    navigate('/login');
+  };
+
+  const handleMenuClick = ({ key }) => {
+    navigate(key);
+  };
+
+  const userMenu = (
+    <Menu>
+      <Menu.Item key="profile" icon={<ProfileOutlined />} onClick={() => navigate('/dashboard/profile')}>
+        Profile
+      </Menu.Item>
+      <Menu.Divider />
+      <Menu.Item key="logout" icon={<LogoutOutlined />} onClick={handleLogout}>
+        Logout
+      </Menu.Item>
+    </Menu>
+  );
+
+  const getMenuItems = () => {
+    const baseItems = [
+      {
+        key: '/dashboard/profile',
+        icon: <ProfileOutlined />,
+        label: 'Profile'
+      }
+    ];
+
+    if (user?.roles?.includes('TD')) {
+      baseItems.unshift({
+        key: '/dashboard/td',
+        icon: <DashboardOutlined />,
+        label: 'TD Dashboard'
+      });
+    }
+
+    if (user?.roles?.includes('GD')) {
+      baseItems.unshift({
+        key: '/dashboard/gd',
+        icon: <DashboardOutlined />,
+        label: 'GD Dashboard'
+      });
+    }
+
+    return baseItems;
+  };
+
+  if (!user || !selectedDirectorate) {
+    return null;
+  }
+
+  return (
+    <Layout style={{ minHeight: '100vh' }}>
+      <Sider theme="dark" collapsible>
+        <div style={{
+          height: '64px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'white',
+          fontSize: '18px',
+          fontWeight: 'bold'
+        }}>
+          {selectedDirectorate}
+        </div>
+        <Menu
+          theme="dark"
+          mode="inline"
+          selectedKeys={[location.pathname]}
+          items={getMenuItems()}
+          onClick={handleMenuClick}
+        />
+      </Sider>
+      
+      <Layout>
+        <Header style={{
+          padding: '0 24px',
+          background: '#fff',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+        }}>
+          <h2 style={{ margin: 0 }}>Welcome, {user.username}</h2>
+          <Dropdown overlay={userMenu} placement="bottomRight">
+            <Button type="text" style={{ height: '100%' }}>
+              <Avatar icon={<UserOutlined />} style={{ marginRight: '8px' }} />
+              {user.username}
+            </Button>
+          </Dropdown>
+        </Header>
+        
+        <Content style={{
+          margin: '24px 16px',
+          padding: '24px',
+          background: '#fff',
+          borderRadius: '6px'
+        }}>
+          <Outlet />
+        </Content>
+      </Layout>
+    </Layout>
+  );
+};
+
+export default Dashboard;
+```
+
+### 8. src/components/TDDashboard.jsx
+```jsx
+import React, { useState, useEffect } from 'react';
+import { Card, Row, Col, Statistic, Table, Spin, message, Typography } from 'antd';
+import { 
+  ProjectOutlined, 
+  TeamOutlined, 
+  FileTextOutlined, 
+  BarChartOutlined 
+} from '@ant-design/icons';
+import { authService } from '../services/authService';
+import { useAuth } from '../context/AuthContext';
+
+const { Title } = Typography;
+
+const TDDashboard = () => {
+  const [dashboardData, setDashboardData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const { selectedDirectorate } = useAuth();
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      const response = await authService.getTDDashboard();
+      setDashboardData(response.data);
+    } catch (error) {
+      console.error('Dashboard error:', error);
+      message.error('Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const mockProjects = [
+    { key: 1, name: 'Project Alpha', status: 'Active', progress: '75%' },
+    { key: 2, name: 'Project Beta', status: 'Planning', progress: '25%' },
+    { key: 3, name: 'Project Gamma', status: 'Completed', progress: '100%' },
+  ];
+
+  const projectColumns = [
+    { title: 'Project Name', dataIndex: 'name', key: 'name' },
+    { title: 'Status', dataIndex: 'status', key: 'status' },
+    { title: 'Progress', dataIndex: 'progress', key: 'progress' },
+  ];
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px' }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <Title level={2}>TD Dashboard - {selectedDirectorate}</Title>
+      
+      <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
+        <Col xs={24} sm={12} md={6}>
+          <Card>
+            <Statistic
+              title="Active Projects"
+              value={12}
+              prefix={<ProjectOutlined />}
+              valueStyle={{ color: '#3f8600' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <Card>
+            <Statistic
+              title="Team Members"
+              value={25}
+              prefix={<TeamOutlined />}
+              valueStyle={{ color: '#1890ff' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <Card>
+            <Statistic
+              title="Reports"
+              value={48}
+              prefix={<FileTextOutlined />}
+              valueStyle={{ color: '#722ed1' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <Card>
+            <Statistic
+              title="Completion Rate"
+              value={87}
+              suffix="%"
+              prefix={<BarChartOutlined />}
+              valueStyle={{ color: '#cf1322' }}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      <Row gutter={[16, 16]}>
+        <Col xs={24} lg={16}>
+          <Card title="Recent Projects" bordered={false}>
+            <Table 
+              dataSource={mockProjects} 
+              columns={projectColumns} 
+              pagination={false}
+              size="small"
+            />
+          </Card>
+        </Col>
+        <Col xs={24} lg={8}>
+          <Card title="Quick Actions" bordered={false}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <Card.Grid style={{ width: '100%', textAlign: 'center' }}>
+                <ProjectOutlined style={{ fontSize: '24px', color: '#1890ff' }} />
+                <div>Create New Project</div>
+              </Card.Grid>
+              <Card.Grid style={{ width: '100%', textAlign: 'center' }}>
+                <FileTextOutlined style={{ fontSize: '24px', color: '#52c41a' }} />
+                <div>Generate Report</div>
+              </Card.Grid>
+              <Card.Grid style={{ width: '100%', textAlign: 'center' }}>
+                <TeamOutlined style={{ fontSize: '24px', color: '#faad14' }} />
+                <div>Manage Team</div>
+              </Card.Grid>
+            </div>
+          </Card>
+        </Col>
+      </Row>
+
+      {dashboardData && (
+        <Card title="Dashboard Data" style={{ marginTop: '24px' }}>
+          <pre style={{ background: '#f5f5f5', padding: '16px', borderRadius: '4px' }}>
+            {JSON.stringify(dashboardData, null, 2)}
+          </pre>
+        </Card>
+      )}
+    </div>
+  );
+};
+
+export default TDDashboard;
+```
+
+### 9. src/components/GDDashboard.jsx
+```jsx
+import React, { useState, useEffect } from 'react';
+import { Card, Row, Col, Statistic, Progress, Spin, message, Typography } from 'antd';
+import { 
+  DashboardOutlined, 
+  TrophyOutlined, 
+  LineChartOutlined, 
+  ToolOutlined 
+} from '@ant-design/icons';
+import { authService } from '../services/authService';
+import { useAuth } from '../context/AuthContext';
+
+const { Title } = Typography;
+
+const GDDashboard = () => {
+  const [dashboardData, setDashboardData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const { selectedDirectorate } = useAuth();
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      const response = await authService.getGDDashboard();
+      setDashboardData(response.data);
+    } catch (error) {
+      console.error('Dashboard error:', error);
+      message.error('Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px' }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <Title level={2}>GD Dashboard - {selectedDirectorate}</Title>
+      
+      <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
+        <Col xs={24} sm={12} md={6}>
+          <Card>
+            <Statistic
+              title="Total Operations"
+              value={156}
+              prefix={<DashboardOutlined />}
+              valueStyle={{ color: '#3f8600' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <Card>
+            <Statistic
+              title="Success Rate"
+              value={94.2}
+              suffix="%"
+              prefix={<TrophyOutlined />}
+              valueStyle={{ color: '#1890ff' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <Card>
+            <Statistic
+              title="Performance Score"
+              value={8.9}
+              suffix="/10"
+              prefix={<LineChartOutlined />}
+              valueStyle={{ color: '#722ed1' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <Card>
+            <Statistic
+              title="Active Tools"
+              value={32}
+              prefix={<ToolOutlined />}
+              valueStyle={{ color: '#cf1322' }}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      <Row gutter={[16, 16]}>
+        <Col xs={24} lg={12}>
+          <Card title="Performance Metrics" bordered={false}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <div style={{ marginBottom: '8px' }}>Operations Efficiency</div>
+                <Progress percent={89} status="active" strokeColor="#52c41a" />
+              </div>
+              <div>
+                <div style={{ marginBottom: '8px' }}>Resource Utilization</div>
+                <Progress percent={76} status="active" strokeColor="#1890ff" />
+              </div>
+              <div>
+                <div style={{ marginBottom: '8px' }}>Quality Index</div>
+                <Progress percent={94} status="active" strokeColor="#722ed1" />
+              </div>
+              <div>
+                <div style={{ marginBottom: '8px' }}>Safety Score</div>
+                <Progress percent={98} status="active" strokeColor="#faad14" />
+              </div>
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Card title="System Overview" bordered={false}>
+            <Row gutter={[8, 8]}>
+              <Col span={12}>
+                <Card.Grid style={{ width: '100%', textAlign: 'center' }}>
+                  <DashboardOutlined style={{ fontSize: '32px', color: '#1890ff' }} />
+                  <div style={{ marginTop: '8px' }}>Operations</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold' }}>156</div>
+                </Card.Grid>
+              </Col>
+              <Col span={12}>
+                <Card.Grid style={{ width: '100%', textAlign: 'center' }}>
+                  <LineChartOutlined style={{ fontSize: '32px', color: '#52c41a' }} />
+                  <div style={{ marginTop: '8px' }}>Analytics</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold' }}>42</div>
+                </Card.Grid>
+              </Col>
+              <Col span={12}>
+                <Card.Grid style={{ width: '100%', textAlign: 'center' }}>
+                  <ToolOutlined style={{ fontSize: '32px', color: '#faad14' }} />
+                  <div style={{ marginTop: '8px' }}>Tools</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold' }}>32</div>
+                </Card.Grid>
+              </Col>
+              <Col span={12}>
+                <Card.Grid style={{ width: '100%', textAlign: 'center' }}>
+                  <TrophyOutlined style={{ fontSize: '32px', color: '#722ed1' }} />
+                  <div style={{ marginTop: '8px' }}>Achievements</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold' }}>15</div>
+                </Card.Grid>
+              </Col>
+            </Row>
+          </Card>
+        </Col>
+      </Row>
+
+      {dashboardData && (
+        <Card title="Dashboard Data" style={{ marginTop: '24px' }}>
+          <pre style={{ background: '#f5f5f5', padding: '16px', borderRadius: '4px' }}>
+            {JSON.stringify(dashboardData, null, 2)}
+          </pre>
+        </Card>
+      )}
+    </div>
+  );
+};
+
+export default GDDashboard;
+```
+
+### 10. src/components/Profile.jsx
+```jsx
+import React, { useState, useEffect } from 'react';
+import { Card, Descriptions, Tag, Spin, message, Button, Modal } from 'antd';
+import { EditOutlined, UserOutlined } from '@ant-design/icons';
+import { useAuth } from '../context/AuthContext';
+import { authService } from '../services/authService';
+
+const Profile = () => {
+  const [profileData, setProfileData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const { user, selectedDirectorate } = useAuth();
+
+  useEffect(() => {
+    fetchProfileData();
+  }, []);
+
+  const fetchProfileData = async () => {
+    try {
+      const response = await authService.getUserProfile();
+      setProfileData(response.data);
+    } catch (error) {
+      console.error('Profile error:', error);
+      message.error('Failed to load profile data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const showEditModal = () => {
+    Modal.info({
+      title: 'Edit Profile',
+      content: 'Profile editing functionality would be implemented here.',
+      onOk() {},
+    });
+  };
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px' }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <Card
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span><UserOutlined style={{ marginRight: '8px' }} />User Profile</span>
+            <Button type="primary" icon={<EditOutlined />} onClick={showEditModal}>
+              Edit Profile
+            </Button>
+          </div>
+        }
+        bordered={false}
+      >
+        <Descriptions column={2} bordered>
+          <Descriptions.Item label="Employee ID" span={1}>
+            {user?.empId}
+          </Descriptions.Item>
+          <Descriptions.Item label="Username" span={1}>
+            {user?.username}
+          </Descriptions.Item>
+          <Descriptions.Item label="Email" span={2}>
+            {user?.email}
+          </Descriptions.Item>
+          <Descriptions.Item label="Current Directorate" span={1}>
+            <Tag color="blue">{selectedDirectorate}</Tag>
+          </Descriptions.Item>
+          <Descriptions.Item label="Roles" span={1}>
+            {user?.roles?.map(role => (
+              <Tag key={role} color="green" style={{ marginBottom: '4px' }}>
+                {role}
+              </Tag>
+            ))}
+          </Descriptions.Item>
+          <Descriptions.Item label="Account Status" span={1}>
+            <Tag color="success">Active</Tag>
+          </Descriptions.Item>
+          <Descriptions.Item label="Last Login" span={1}>
+            {new Date().toLocaleDateString()}
+          </Descriptions.Item>
+        </Descriptions>
+
+        {profileData && (
+          <Card title="Additional Profile Data" style={{ marginTop: '24px' }} size="small">
+            <pre style={{ background: '#f5f5f5', padding: '16px', borderRadius: '4px' }}>
+              {JSON.stringify(profileData, null, 2)}
+            </pre>
+          </Card>
+        )}
+      </Card>
+    </div>
+  );
+};
+
+export default Profile;
+```
+
+### 11. src/components/PrivateRoute.jsx
+```jsx
+import React from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+
+const PrivateRoute = ({ children, requiredRole = null }) => {
+  const { isAuthenticated, user, requiresDirectorateSelection } = useAuth();
+  const location = useLocation();
+
+  if (!isAuthenticated) {
+    if (requiresDirectorateSelection) {
+      return <Navigate to="/select-directorate" state={{ from: location }} replace />;
+    }
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (requiredRole && user?.roles && !user.roles.includes(requiredRole)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return children;
+};
+
+export default PrivateRoute;
+```
+
+## Main App Files
+
+### 12. src/App.js
+```jsx
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { ConfigProvider } from 'antd';
+import { AuthProvider } from './context/AuthContext';
+import PrivateRoute from './components/PrivateRoute';
+import Login from './components/Login';
+import DirectorateSelection from './components/DirectorateSelection';
+import Dashboard from './components/Dashboard';
+import TDDashboard from './components/TDDashboard';
+import GDDashboard from './components/GDDashboard';
+import Profile from './components/Profile';
+import './styles/App.css';
+
+function App() {
+  return (
+    <ConfigProvider
+      theme={{
+        token: {
+          colorPrimary: '#1890ff',
+        },
+      }}
+    >
+      <AuthProvider>
+        <Router>
+          <div className="App">
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/select-directorate" element={<DirectorateSelection />} />
+              
+              <Route path="/dashboard" element={
+                <PrivateRoute>
+                  <Dashboard />
+                </PrivateRoute>
+              }>
+                <Route index element={<Navigate to="/dashboard/profile" replace />} />
+                <Route path="profile" element={<Profile />} />
+                <Route path="td" element={
+                  <PrivateRoute requiredRole="TD">
+                    <TDDashboard />
+                  </PrivateRoute>
+                } />
+                <Route path="gd" element={
+                  <PrivateRoute requiredRole="GD">
+                    <GDDashboard />
+                  </PrivateRoute>
+                } />
+              </Route>
+              
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </div>
+        </Router>
+      </AuthProvider>
+    </ConfigProvider>
+  );
+}
+
+export default App;
+```
+
+### 13. src/styles/App.css
+```css
+.App {
+  text-align: center;
+}
+
+.login-form {
+  max-width: 300px;
+}
+
+.login-form-forgot {
+  float: right;
+}
+
+.ant-col-rtl .login-form-forgot {
+  float: left;
+}
+
+.login-form-button {
+  width: 100%;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Card hover effects */
+.ant-card {
+  transition: all 0.3s ease;
+}
+
+.ant-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Custom button styles */
+.ant-btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+}
+
+.ant-btn-primary:hover {
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+}
+
+/* Responsive utilities */
+@media (max-width: 768px) {
+  .ant-layout-sider {
+    display: none;
+  }
+  
+  .ant-layout-content {
+    margin: 16px 8px;
+    padding: 16px;
+  }
+}
+
+/* Loading spinner overlay */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+```
+
+### 14. src/utils/constants.js
+```javascript
+export const API_ENDPOINTS = {
+  LOGIN: '/auth/signin',
+  SELECT_DIRECTORATE: '/auth/select-directorate',
+  USER_DIRECTORATES: '/auth/user-directorates',
+  TD_DASHBOARD: '/td/dashboard',
+  GD_DASHBOARD: '/gd/dashboard',
+  USER_PROFILE: '/user/profile'
+};
+
+export const ROLES = {
+  TD: 'TD',
+  GD: 'GD'
+};
+
+export const DIRECTORATES = {
+  SDD: 'SDD',
+  CND: 'CND'
+};
+
+export const LOCAL_STORAGE_KEYS = {
+  AUTH_TOKEN: 'authToken',
+  TEMP_TOKEN: 'tempToken',
+  USER_INFO: 'userInfo',
+  SELECTED_DIRECTORATE: 'selectedDirectorate'
+};
+```
+
+### 15. .env
+```
+REACT_APP_API_URL=http://localhost:8080/api
+```
+
+## Running the Application
+
+### 1. Start Backend Server
+```bash
+# Make sure your Spring Boot application is running on port 8080
+mvn spring-boot:run
+```
+
+### 2. Start React Application
+```bash
+# In the React project directory
+npm start
+```
+
+The application will be available at `http://localhost:3000`
+
+## Features Implemented
+
+- ✅ **JWT Authentication** with automatic token management
+- ✅ **Directorate Selection** workflow for multi-directorate users
+- ✅ **Role-based Access Control** (TD/GD dashboards)
+- ✅ **Responsive Design** with Ant Design components
+- ✅ **Protected Routes** with automatic redirects
+- ✅ **Context-based State Management** for authentication
+- ✅ **Axios Interceptors** for automatic token injection
+- ✅ **Error Handling** with user-friendly messages
+- ✅ **Loading States** throughout the application
+- ✅ **Modern React Patterns** with hooks and functional components
+
+The frontend seamlessly integrates with your Spring Boot JWT authentication backend, providing a complete authentication solution with directorate selection functionality.
+
+[1](https://dev.to/sanjayttg/jwt-authentication-in-react-with-react-router-1d03)
+[2](https://www.youtube.com/watch?v=nI8PYZNFtac)
+[3](https://clerk.com/blog/adding-jwt-authentication-to-react)
+[4](https://permify.co/post/jwt-authentication-in-react/)
+[5](https://www.youtube.com/watch?v=27KeYk-5vJw)
+[6](https://www.bezkoder.com/react-jwt-auth/)
+[7](https://www.youtube.com/watch?v=Ibp-W3cPnbo)
+[8](https://developer.okta.com/blog/2019/10/02/jwt-react-auth)
+[9](https://stackoverflow.com/questions/41996167/how-to-provide-frontend-with-json-web-token-after-server-authentication)
+[10](https://2x.ant.design/components/form/)

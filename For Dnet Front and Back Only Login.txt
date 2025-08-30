@@ -7893,6 +7893,426 @@ curl -X GET http://localhost:8080/api/dependents/1/attachment/birthCertificate/d
 8. **File Management**: Upload, update, delete, and download attachments
 9. **Transaction Management**: All operations are transactional
 10. **Validation**: Proper error handling and validation
+==============================================================
+# Complete Explanation of One-to-Many Relationship with File Attachments
+
+## Overview
+
+This is a comprehensive example demonstrating a **One-to-Many relationship** between **Employee** and **Dependents** entities, with integrated file attachment management. Here's a detailed breakdown:
+
+## 1. Relationship Structure
+
+### One-to-Many Concept
+- **One Employee** can have **Many Dependents** (spouse, children, parents)
+- **One Dependent** belongs to **only One Employee**
+- This creates a parent-child relationship in the database
+
+### Database Design
+```
+employees (1) ←→ (many) dependents
+     ↓                    ↓
+   emp_id              employee_id (foreign key)
+```
+
+## 2. Entity Relationship Mapping
+
+### Employee Entity (Parent/One Side)
+```java
+@OneToMany(mappedBy = "employee", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+@JsonManagedReference
+private List<Dependent> dependents = new ArrayList<>();
+```
+
+**Key Annotations Explained:**
+- `@OneToMany`: Defines one-to-many relationship
+- `mappedBy = "employee"`: References the `employee` field in Dependent entity
+- `cascade = CascadeType.ALL`: Operations on Employee cascade to Dependents
+- `fetch = FetchType.LAZY`: Dependents loaded only when accessed
+- `orphanRemoval = true`: Dependents removed from list are deleted from database
+- `@JsonManagedReference`: Prevents infinite JSON recursion
+
+### Dependent Entity (Child/Many Side)
+```java
+@ManyToOne(fetch = FetchType.LAZY)
+@JoinColumn(name = "employee_id", nullable = false)
+@JsonBackReference
+private Employee employee;
+```
+
+**Key Annotations Explained:**
+- `@ManyToOne`: Defines many-to-one relationship
+- `@JoinColumn`: Specifies foreign key column name
+- `nullable = false`: Employee reference is mandatory
+- `@JsonBackReference`: Complements @JsonManagedReference to prevent recursion
+
+## 3. Cascade Operations
+
+### What Cascade Means
+When you perform operations on the parent (Employee), they automatically apply to children (Dependents):
+
+```java
+// Save employee with dependents
+Employee emp = new Employee("EMP001", "John", "Doe", "john@example.com");
+emp.addDependent(new Dependent("Jane", RelationshipType.SPOUSE));
+emp.addDependent(new Dependent("Johnny", RelationshipType.CHILD));
+employeeRepository.save(emp); // Saves employee AND all dependents
+```
+
+### Types of Cascade Operations
+- **PERSIST**: Saving employee saves dependents
+- **MERGE**: Updating employee updates dependents  
+- **REMOVE**: Deleting employee deletes dependents
+- **REFRESH**: Refreshing employee refreshes dependents
+- **ALL**: Includes all above operations
+
+## 4. File Attachment Integration
+
+### Attachment Storage Strategy
+Each dependent can have multiple file attachments stored as database columns:
+
+```java
+// Attachment columns in Dependent entity
+private String birthCertificate;    // File path
+private String photo;               // File path  
+private String identityProof;       // File path
+private String medicalCertificate;  // File path
+```
+
+### File Storage Architecture
+```
+Database: Stores file paths/names
+    ↓
+File Server: Stores actual files
+    ↓
+Directory Structure: /uploads/DEPENDENT/2025/08/dependentId/filename
+```
+
+## 5. CRUD Operations Explained
+
+### Create Operations
+
+#### Create Employee with Dependents
+```java
+public Employee saveEmployeeWithDependents(Employee employee) {
+    // 1. Save employee first to get ID
+    Employee savedEmployee = employeeRepository.save(employee);
+    
+    // 2. Set employee reference for all dependents
+    if (employee.getDependents() != null) {
+        for (Dependent dependent : employee.getDependents()) {
+            dependent.setEmployee(savedEmployee); // Set foreign key
+        }
+        dependentRepository.saveAll(employee.getDependents()); // Save all dependents
+    }
+    
+    return savedEmployee;
+}
+```
+
+#### Create Dependent with Attachments
+```java
+public Dependent saveDependentWithAttachments(Long employeeId, Dependent dependent, 
+                                            Map<String, MultipartFile> attachments) {
+    // 1. Find parent employee
+    Employee employee = employeeRepository.findById(employeeId)
+        .orElseThrow(() -> new RuntimeException("Employee not found"));
+    
+    // 2. Set relationship
+    dependent.setEmployee(employee);
+    
+    // 3. Save dependent to get ID
+    Dependent savedDependent = dependentRepository.save(dependent);
+    
+    // 4. Process file attachments
+    if (attachments != null) {
+        for (Map.Entry<String, MultipartFile> entry : attachments.entrySet()) {
+            String attachmentType = entry.getKey();
+            MultipartFile file = entry.getValue();
+            
+            // Store file on file server
+            String filePath = fileStorageService.storeFile(file, "DEPENDENT", 
+                                                         savedDependent.getId(), attachmentType);
+            
+            // Update appropriate database column
+            updateAttachmentField(savedDependent, attachmentType, filePath);
+        }
+        
+        // Save again with attachment paths
+        savedDependent = dependentRepository.save(savedDependent);
+    }
+    
+    return savedDependent;
+}
+```
+
+### Update Operations
+
+#### Update Employee with Dependents (Full Replace)
+```java
+public Employee updateEmployeeWithDependents(Long employeeId, Employee employeeDetails) {
+    // 1. Find existing employee with dependents
+    Employee existingEmployee = employeeRepository.findByIdWithDependents(employeeId)
+        .orElseThrow(() -> new RuntimeException("Employee not found"));
+    
+    // 2. Update employee fields
+    existingEmployee.setFirstName(employeeDetails.getFirstName());
+    existingEmployee.setLastName(employeeDetails.getLastName());
+    // ... other fields
+    
+    // 3. Replace dependents completely
+    existingEmployee.getDependents().clear(); // Triggers orphan removal
+    
+    if (employeeDetails.getDependents() != null) {
+        for (Dependent newDependent : employeeDetails.getDependents()) {
+            newDependent.setEmployee(existingEmployee);
+            existingEmployee.addDependent(newDependent);
+        }
+    }
+    
+    return employeeRepository.save(existingEmployee);
+}
+```
+
+#### Update Individual Dependent
+```java
+public Dependent updateDependent(Long dependentId, Dependent dependentDetails) {
+    // Find existing dependent
+    Dependent existingDependent = dependentRepository.findById(dependentId)
+        .orElseThrow(() -> new RuntimeException("Dependent not found"));
+    
+    // Update only the fields that changed
+    existingDependent.setName(dependentDetails.getName());
+    existingDependent.setRelationship(dependentDetails.getRelationship());
+    existingDependent.setDateOfBirth(dependentDetails.getDateOfBirth());
+    // ... other fields
+    
+    // Employee relationship remains unchanged
+    return dependentRepository.save(existingDependent);
+}
+```
+
+### Read Operations
+
+#### Fetch Employee with Dependents (Eager Loading)
+```java
+@Query("SELECT e FROM Employee e LEFT JOIN FETCH e.dependents WHERE e.id = :id")
+Optional<Employee> findByIdWithDependents(@Param("id") Long id);
+```
+
+**Explanation:**
+- `LEFT JOIN FETCH`: Loads dependents in single query (avoids N+1 problem)
+- Without FETCH: Would require separate query for each dependent
+- `LEFT JOIN`: Includes employees even if they have no dependents
+
+#### Filter Dependents by Relationship
+```java
+List<Dependent> findByEmployeeIdAndRelationship(Long employeeId, RelationshipType relationship);
+```
+
+### Delete Operations
+
+#### Delete Employee (Cascades to Dependents)
+```java
+public void deleteEmployee(Long id) {
+    // This automatically deletes all dependents due to cascade=ALL
+    employeeRepository.deleteById(id);
+}
+```
+
+#### Delete Individual Dependent
+```java
+public void deleteDependent(Long id) {
+    Dependent dependent = dependentRepository.findById(id)
+        .orElseThrow(() -> new RuntimeException("Dependent not found"));
+    
+    // 1. Delete associated files first
+    try {
+        if (dependent.getBirthCertificate() != null) {
+            fileStorageService.deleteFile(dependent.getBirthCertificate());
+        }
+        // ... delete other attachments
+    } catch (IOException e) {
+        // Log error but continue
+    }
+    
+    // 2. Delete dependent record
+    dependentRepository.deleteById(id);
+}
+```
+
+## 6. File Management Integration
+
+### File Storage Process
+```java
+private void updateAttachmentField(Dependent dependent, String attachmentType, String filePath) {
+    switch (attachmentType.toLowerCase()) {
+        case "birthcertificate":
+            dependent.setBirthCertificate(filePath);
+            break;
+        case "photo":
+            dependent.setPhoto(filePath);
+            break;
+        case "identityproof":
+            dependent.setIdentityProof(filePath);
+            break;
+        case "medicalcertificate":
+            dependent.setMedicalCertificate(filePath);
+            break;
+    }
+}
+```
+
+### File Path Generation
+```
+Pattern: /uploads/DEPENDENT/YYYY/MM/dependentId/uniqueFilename.ext
+Example: /uploads/DEPENDENT/2025/08/123/birth_cert_1693456789_abc12345.pdf
+```
+
+## 7. Transaction Management
+
+### Why Transactions Matter
+```java
+@Transactional  // Ensures all operations succeed or all fail
+public Employee updateEmployeeWithDependents(Long employeeId, Employee employeeDetails) {
+    // If any operation fails, entire transaction rolls back
+    // 1. Update employee
+    // 2. Delete old dependents  
+    // 3. Add new dependents
+    // 4. Save changes
+}
+```
+
+## 8. API Design Patterns
+
+### RESTful Endpoints
+```
+POST   /api/employees                    # Create employee
+GET    /api/employees/{id}/with-dependents # Get employee with dependents
+PUT    /api/employees/{id}/with-dependents # Update employee with dependents
+POST   /api/dependents/employee/{id}     # Add dependent to employee
+PUT    /api/dependents/{id}              # Update specific dependent
+DELETE /api/dependents/{id}              # Delete specific dependent
+```
+
+### Request/Response Patterns
+
+#### Create Request (JSON + Files)
+```bash
+# Using multipart form data for files
+curl -X POST /api/dependents/employee/1 \
+  -F "name=John Jr" \
+  -F "relationship=CHILD" \
+  -F "birthCertificate=@cert.pdf" \
+  -F "photo=@photo.jpg"
+```
+
+#### Update Response (JSON)
+```json
+{
+  "message": "Dependent updated successfully",
+  "status": "success", 
+  "data": {
+    "id": 1,
+    "name": "John Jr Updated",
+    "relationship": "CHILD",
+    "birthCertificate": "/uploads/DEPENDENT/2025/08/1/cert_123.pdf",
+    "photo": "/uploads/DEPENDENT/2025/08/1/photo_456.jpg"
+  }
+}
+```
+
+## 9. Performance Considerations
+
+### N+1 Query Problem
+```java
+// BAD: This creates N+1 queries
+List<Employee> employees = employeeRepository.findAll();
+for (Employee emp : employees) {
+    System.out.println(emp.getDependents().size()); // Triggers separate query per employee
+}
+
+// GOOD: Use fetch join or batch loading
+@Query("SELECT e FROM Employee e LEFT JOIN FETCH e.dependents")
+List<Employee> findAllWithDependents();
+```
+
+### Lazy Loading Strategy
+```java
+@OneToMany(fetch = FetchType.LAZY) // Default - loads dependents only when accessed
+vs
+@OneToMany(fetch = FetchType.EAGER) // Always loads dependents with employee
+```
+
+## 10. Error Handling Strategies
+
+### Constraint Violations
+```java
+try {
+    employee.addDependent(dependent);
+    employeeRepository.save(employee);
+} catch (DataIntegrityViolationException e) {
+    throw new RuntimeException("Dependent validation failed: " + e.getMessage());
+}
+```
+
+### File Operations
+```java
+try {
+    String filePath = fileStorageService.storeFile(file, "DEPENDENT", dependentId, "photo");
+    dependent.setPhoto(filePath);
+} catch (IOException e) {
+    // Clean up partial operations
+    dependentRepository.delete(dependent);
+    throw new RuntimeException("File upload failed: " + e.getMessage());
+}
+```
+
+## 11. Security Considerations
+
+### Role-Based Access
+```java
+@PreAuthorize("hasRole('TD') or hasRole('GD')")
+public ResponseEntity<?> updateDependent(@PathVariable Long id, @RequestBody Dependent dependent) {
+    // Only TD or GD roles can update dependents
+}
+```
+
+### File Type Validation
+```java
+private static final String[] ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png"};
+
+private void validateFile(MultipartFile file) {
+    String extension = getFileExtension(file.getOriginalFilename());
+    if (!Arrays.asList(ALLOWED_EXTENSIONS).contains(extension)) {
+        throw new IllegalArgumentException("File type not allowed: " + extension);
+    }
+}
+```
+
+## 12. Benefits of This Approach
+
+### Data Integrity
+- Foreign key constraints ensure referential integrity
+- Cascade operations maintain consistency
+- Transactions ensure atomicity
+
+### Performance
+- Lazy loading reduces memory usage
+- Fetch joins prevent N+1 queries
+- Indexed foreign keys improve query performance
+
+### Maintainability
+- Clean separation of concerns
+- Consistent API patterns
+- Comprehensive error handling
+
+### Flexibility
+- Independent dependent management
+- Individual file operations
+- Batch and single operations supported
+
+This architecture provides a robust, scalable solution for managing one-to-many relationships with file attachments while maintaining data integrity, performance, and security.
 
 This example demonstrates a complete one-to-many relationship with file attachments, including all CRUD operations and file management capabilities.
+
 

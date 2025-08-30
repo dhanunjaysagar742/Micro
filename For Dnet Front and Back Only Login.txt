@@ -5600,3 +5600,991 @@ The frontend seamlessly integrates with your Spring Boot JWT authentication back
 [8](https://developer.okta.com/blog/2019/10/02/jwt-react-auth)
 [9](https://stackoverflow.com/questions/41996167/how-to-provide-frontend-with-json-web-token-after-server-authentication)
 [10](https://2x.ant.design/components/form/)
+
+====================================================
+# File Attachment Management with Attachment Columns in Module Tables
+
+Here's the solution for handling file attachments when each module table has its own attachment columns:
+
+## Database Design
+
+### 1. Module Tables with Attachment Columns
+```sql
+-- Leave table with attachment columns
+CREATE TABLE leave_applications (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    emp_id BIGINT NOT NULL,
+    leave_type VARCHAR(50) NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    reason TEXT,
+    status VARCHAR(20) DEFAULT 'PENDING',
+    
+    -- Attachment columns (store filenames/paths)
+    medical_certificate VARCHAR(255),
+    supporting_document VARCHAR(255),
+    additional_attachment VARCHAR(255),
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- LTC table with attachment columns
+CREATE TABLE ltc_applications (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    emp_id BIGINT NOT NULL,
+    destination VARCHAR(200) NOT NULL,
+    travel_date DATE NOT NULL,
+    amount DECIMAL(10,2),
+    status VARCHAR(20) DEFAULT 'PENDING',
+    
+    -- Attachment columns
+    travel_ticket VARCHAR(255),
+    hotel_receipt VARCHAR(255),
+    expense_voucher VARCHAR(255),
+    travel_certificate VARCHAR(255),
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- TADA table with attachment columns
+CREATE TABLE tada_applications (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    emp_id BIGINT NOT NULL,
+    purpose VARCHAR(500) NOT NULL,
+    from_date DATE NOT NULL,
+    to_date DATE NOT NULL,
+    total_amount DECIMAL(10,2),
+    status VARCHAR(20) DEFAULT 'PENDING',
+    
+    -- Attachment columns
+    travel_bills VARCHAR(255),
+    lodging_receipt VARCHAR(255),
+    food_receipt VARCHAR(255),
+    miscellaneous_receipt VARCHAR(255),
+    official_letter VARCHAR(255),
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+```
+
+## Entity Classes
+
+### 1. Leave Application Entity
+```java
+package com.example.auth.entity;
+
+import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "leave_applications")
+public class LeaveApplication {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    
+    @Column(name = "emp_id")
+    private Long empId;
+    
+    @Column(name = "leave_type")
+    private String leaveType;
+    
+    @Column(name = "start_date")
+    private LocalDate startDate;
+    
+    @Column(name = "end_date")
+    private LocalDate endDate;
+    
+    private String reason;
+    private String status = "PENDING";
+    
+    // Attachment columns - store file paths/names
+    @Column(name = "medical_certificate")
+    private String medicalCertificate;
+    
+    @Column(name = "supporting_document")
+    private String supportingDocument;
+    
+    @Column(name = "additional_attachment")
+    private String additionalAttachment;
+    
+    @CreationTimestamp
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+    
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+    
+    // Constructors
+    public LeaveApplication() {}
+    
+    // Getters and Setters
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    
+    public Long getEmpId() { return empId; }
+    public void setEmpId(Long empId) { this.empId = empId; }
+    
+    public String getLeaveType() { return leaveType; }
+    public void setLeaveType(String leaveType) { this.leaveType = leaveType; }
+    
+    public LocalDate getStartDate() { return startDate; }
+    public void setStartDate(LocalDate startDate) { this.startDate = startDate; }
+    
+    public LocalDate getEndDate() { return endDate; }
+    public void setEndDate(LocalDate endDate) { this.endDate = endDate; }
+    
+    public String getReason() { return reason; }
+    public void setReason(String reason) { this.reason = reason; }
+    
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    
+    public String getMedicalCertificate() { return medicalCertificate; }
+    public void setMedicalCertificate(String medicalCertificate) { this.medicalCertificate = medicalCertificate; }
+    
+    public String getSupportingDocument() { return supportingDocument; }
+    public void setSupportingDocument(String supportingDocument) { this.supportingDocument = supportingDocument; }
+    
+    public String getAdditionalAttachment() { return additionalAttachment; }
+    public void setAdditionalAttachment(String additionalAttachment) { this.additionalAttachment = additionalAttachment; }
+    
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+}
+```
+
+### 2. LTC Application Entity
+```java
+package com.example.auth.entity;
+
+import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "ltc_applications")
+public class LTCApplication {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    
+    @Column(name = "emp_id")
+    private Long empId;
+    
+    private String destination;
+    
+    @Column(name = "travel_date")
+    private LocalDate travelDate;
+    
+    private BigDecimal amount;
+    private String status = "PENDING";
+    
+    // Attachment columns
+    @Column(name = "travel_ticket")
+    private String travelTicket;
+    
+    @Column(name = "hotel_receipt")
+    private String hotelReceipt;
+    
+    @Column(name = "expense_voucher")
+    private String expenseVoucher;
+    
+    @Column(name = "travel_certificate")
+    private String travelCertificate;
+    
+    @CreationTimestamp
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+    
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+    
+    // Constructors, getters and setters...
+    public LTCApplication() {}
+    
+    // Getters and Setters
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    
+    public Long getEmpId() { return empId; }
+    public void setEmpId(Long empId) { this.empId = empId; }
+    
+    public String getDestination() { return destination; }
+    public void setDestination(String destination) { this.destination = destination; }
+    
+    public LocalDate getTravelDate() { return travelDate; }
+    public void setTravelDate(LocalDate travelDate) { this.travelDate = travelDate; }
+    
+    public BigDecimal getAmount() { return amount; }
+    public void setAmount(BigDecimal amount) { this.amount = amount; }
+    
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    
+    public String getTravelTicket() { return travelTicket; }
+    public void setTravelTicket(String travelTicket) { this.travelTicket = travelTicket; }
+    
+    public String getHotelReceipt() { return hotelReceipt; }
+    public void setHotelReceipt(String hotelReceipt) { this.hotelReceipt = hotelReceipt; }
+    
+    public String getExpenseVoucher() { return expenseVoucher; }
+    public void setExpenseVoucher(String expenseVoucher) { this.expenseVoucher = expenseVoucher; }
+    
+    public String getTravelCertificate() { return travelCertificate; }
+    public void setTravelCertificate(String travelCertificate) { this.travelCertificate = travelCertificate; }
+    
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+}
+```
+
+### 3. TADA Application Entity
+```java
+package com.example.auth.entity;
+
+import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "tada_applications")
+public class TADAApplication {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    
+    @Column(name = "emp_id")
+    private Long empId;
+    
+    private String purpose;
+    
+    @Column(name = "from_date")
+    private LocalDate fromDate;
+    
+    @Column(name = "to_date")
+    private LocalDate toDate;
+    
+    @Column(name = "total_amount")
+    private BigDecimal totalAmount;
+    
+    private String status = "PENDING";
+    
+    // Attachment columns
+    @Column(name = "travel_bills")
+    private String travelBills;
+    
+    @Column(name = "lodging_receipt")
+    private String lodgingReceipt;
+    
+    @Column(name = "food_receipt")
+    private String foodReceipt;
+    
+    @Column(name = "miscellaneous_receipt")
+    private String miscellaneousReceipt;
+    
+    @Column(name = "official_letter")
+    private String officialLetter;
+    
+    @CreationTimestamp
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+    
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+    
+    // Constructors, getters and setters...
+    public TADAApplication() {}
+    
+    // All getters and setters similar to above entities
+    // ... (implementation similar to LTCApplication)
+}
+```
+
+## Service Classes
+
+### 1. Enhanced File Storage Service
+```java
+package com.example.auth.service;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.UUID;
+
+@Service
+public class FileStorageService {
+    
+    @Value("${app.file.upload-dir:/var/fileserver/uploads}")
+    private String uploadDir;
+    
+    @Value("${app.file.max-file-size:10485760}") // 10MB
+    private long maxFileSize;
+    
+    private static final String[] ALLOWED_EXTENSIONS = {
+        ".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png", ".gif", ".txt"
+    };
+    
+    public String storeFile(MultipartFile file, String moduleType, Long moduleId, String attachmentType) throws IOException {
+        // Validate file
+        validateFile(file);
+        
+        // Generate unique filename
+        String originalFilename = file.getOriginalFilename();
+        String fileExtension = getFileExtension(originalFilename);
+        String storedFilename = generateUniqueFilename(originalFilename, fileExtension);
+        
+        // Create directory structure: /uploads/LEAVE/2024/08/moduleId/
+        String dateFolder = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy/MM"));
+        String relativePath = String.format("%s/%s/%d", moduleType, dateFolder, moduleId);
+        String fullDirectoryPath = Paths.get(uploadDir, relativePath).toString();
+        
+        // Create directories if they don't exist
+        createDirectoriesIfNotExist(fullDirectoryPath);
+        
+        // Full file path
+        String fullFilePath = Paths.get(fullDirectoryPath, storedFilename).toString();
+        
+        // Save file
+        Path targetLocation = Paths.get(fullFilePath);
+        Files.copy(file.getInputStream(), targetLocation);
+        
+        // Return relative path for database storage
+        return String.format("%s/%s", relativePath, storedFilename);
+    }
+    
+    public void deleteFile(String filePath) throws IOException {
+        if (filePath != null && !filePath.isEmpty()) {
+            Path fileToDelete = Paths.get(uploadDir, filePath);
+            Files.deleteIfExists(fileToDelete);
+        }
+    }
+    
+    public byte[] loadFile(String filePath) throws IOException {
+        Path file = Paths.get(uploadDir, filePath);
+        if (Files.exists(file)) {
+            return Files.readAllBytes(file);
+        }
+        throw new IOException("File not found: " + filePath);
+    }
+    
+    public String getFullFilePath(String relativePath) {
+        return Paths.get(uploadDir, relativePath).toString();
+    }
+    
+    private void validateFile(MultipartFile file) {
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("File is empty");
+        }
+        
+        if (file.getSize() > maxFileSize) {
+            throw new IllegalArgumentException("File size exceeds maximum allowed size");
+        }
+        
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null) {
+            throw new IllegalArgumentException("File name is null");
+        }
+        
+        String fileExtension = getFileExtension(originalFilename).toLowerCase();
+        boolean isAllowedExtension = false;
+        for (String allowedExt : ALLOWED_EXTENSIONS) {
+            if (fileExtension.equals(allowedExt)) {
+                isAllowedExtension = true;
+                break;
+            }
+        }
+        
+        if (!isAllowedExtension) {
+            throw new IllegalArgumentException("File type not allowed: " + fileExtension);
+        }
+    }
+    
+    private String getFileExtension(String filename) {
+        if (filename == null || filename.isEmpty()) {
+            return "";
+        }
+        int lastDotIndex = filename.lastIndexOf('.');
+        return lastDotIndex > 0 ? filename.substring(lastDotIndex) : "";
+    }
+    
+    private String generateUniqueFilename(String originalFilename, String extension) {
+        String baseName = originalFilename.substring(0, originalFilename.lastIndexOf('.'));
+        String timestamp = String.valueOf(System.currentTimeMillis());
+        return String.format("%s_%s_%s%s", baseName, timestamp, UUID.randomUUID().toString().substring(0, 8), extension);
+    }
+    
+    private void createDirectoriesIfNotExist(String directoryPath) throws IOException {
+        Path path = Paths.get(directoryPath);
+        if (!Files.exists(path)) {
+            Files.createDirectories(path);
+        }
+    }
+}
+```
+
+### 2. Leave Application Service
+```java
+package com.example.auth.service;
+
+import com.example.auth.entity.LeaveApplication;
+import com.example.auth.repository.LeaveApplicationRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+@Service
+@Transactional
+public class LeaveApplicationService {
+    
+    @Autowired
+    private LeaveApplicationRepository leaveApplicationRepository;
+    
+    @Autowired
+    private FileStorageService fileStorageService;
+    
+    public LeaveApplication saveLeaveApplication(LeaveApplication leaveApplication) {
+        return leaveApplicationRepository.save(leaveApplication);
+    }
+    
+    public LeaveApplication saveLeaveApplicationWithAttachments(
+            LeaveApplication leaveApplication,
+            Map<String, MultipartFile> attachments) throws IOException {
+        
+        // First save the leave application to get the ID
+        LeaveApplication savedApplication = leaveApplicationRepository.save(leaveApplication);
+        
+        // Then handle attachments
+        if (attachments != null && !attachments.isEmpty()) {
+            for (Map.Entry<String, MultipartFile> entry : attachments.entrySet()) {
+                String attachmentType = entry.getKey();
+                MultipartFile file = entry.getValue();
+                
+                if (file != null && !file.isEmpty()) {
+                    String filePath = fileStorageService.storeFile(file, "LEAVE", savedApplication.getId(), attachmentType);
+                    
+                    // Update the appropriate attachment field
+                    updateAttachmentField(savedApplication, attachmentType, filePath);
+                }
+            }
+            
+            // Save again with attachment paths
+            savedApplication = leaveApplicationRepository.save(savedApplication);
+        }
+        
+        return savedApplication;
+    }
+    
+    public LeaveApplication updateAttachment(Long applicationId, String attachmentType, MultipartFile file) throws IOException {
+        LeaveApplication application = leaveApplicationRepository.findById(applicationId)
+            .orElseThrow(() -> new RuntimeException("Leave application not found"));
+        
+        // Delete old file if exists
+        String oldFilePath = getAttachmentPath(application, attachmentType);
+        if (oldFilePath != null) {
+            fileStorageService.deleteFile(oldFilePath);
+        }
+        
+        // Store new file
+        String newFilePath = fileStorageService.storeFile(file, "LEAVE", applicationId, attachmentType);
+        
+        // Update attachment field
+        updateAttachmentField(application, attachmentType, newFilePath);
+        
+        return leaveApplicationRepository.save(application);
+    }
+    
+    public void deleteAttachment(Long applicationId, String attachmentType) throws IOException {
+        LeaveApplication application = leaveApplicationRepository.findById(applicationId)
+            .orElseThrow(() -> new RuntimeException("Leave application not found"));
+        
+        // Get current file path
+        String filePath = getAttachmentPath(application, attachmentType);
+        
+        if (filePath != null) {
+            // Delete file from storage
+            fileStorageService.deleteFile(filePath);
+            
+            // Update database field to null
+            updateAttachmentField(application, attachmentType, null);
+            leaveApplicationRepository.save(application);
+        }
+    }
+    
+    public byte[] downloadAttachment(Long applicationId, String attachmentType) throws IOException {
+        LeaveApplication application = leaveApplicationRepository.findById(applicationId)
+            .orElseThrow(() -> new RuntimeException("Leave application not found"));
+        
+        String filePath = getAttachmentPath(application, attachmentType);
+        
+        if (filePath == null) {
+            throw new RuntimeException("Attachment not found");
+        }
+        
+        return fileStorageService.loadFile(filePath);
+    }
+    
+    public Map<String, String> getAttachments(Long applicationId) {
+        LeaveApplication application = leaveApplicationRepository.findById(applicationId)
+            .orElseThrow(() -> new RuntimeException("Leave application not found"));
+        
+        Map<String, String> attachments = new HashMap<>();
+        
+        if (application.getMedicalCertificate() != null) {
+            attachments.put("medicalCertificate", application.getMedicalCertificate());
+        }
+        if (application.getSupportingDocument() != null) {
+            attachments.put("supportingDocument", application.getSupportingDocument());
+        }
+        if (application.getAdditionalAttachment() != null) {
+            attachments.put("additionalAttachment", application.getAdditionalAttachment());
+        }
+        
+        return attachments;
+    }
+    
+    public LeaveApplication getLeaveApplication(Long id) {
+        return leaveApplicationRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("Leave application not found"));
+    }
+    
+    private void updateAttachmentField(LeaveApplication application, String attachmentType, String filePath) {
+        switch (attachmentType.toLowerCase()) {
+            case "medicalcertificate":
+            case "medical_certificate":
+                application.setMedicalCertificate(filePath);
+                break;
+            case "supportingdocument":
+            case "supporting_document":
+                application.setSupportingDocument(filePath);
+                break;
+            case "additionalattachment":
+            case "additional_attachment":
+                application.setAdditionalAttachment(filePath);
+                break;
+            default:
+                throw new IllegalArgumentException("Unknown attachment type: " + attachmentType);
+        }
+    }
+    
+    private String getAttachmentPath(LeaveApplication application, String attachmentType) {
+        switch (attachmentType.toLowerCase()) {
+            case "medicalcertificate":
+            case "medical_certificate":
+                return application.getMedicalCertificate();
+            case "supportingdocument":
+            case "supporting_document":
+                return application.getSupportingDocument();
+            case "additionalattachment":
+            case "additional_attachment":
+                return application.getAdditionalAttachment();
+            default:
+                return null;
+        }
+    }
+}
+```
+
+### 3. LTC Application Service
+```java
+package com.example.auth.service;
+
+import com.example.auth.entity.LTCApplication;
+import com.example.auth.repository.LTCApplicationRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+@Service
+@Transactional
+public class LTCApplicationService {
+    
+    @Autowired
+    private LTCApplicationRepository ltcApplicationRepository;
+    
+    @Autowired
+    private FileStorageService fileStorageService;
+    
+    public LTCApplication saveLTCApplicationWithAttachments(
+            LTCApplication ltcApplication,
+            Map<String, MultipartFile> attachments) throws IOException {
+        
+        // First save the LTC application to get the ID
+        LTCApplication savedApplication = ltcApplicationRepository.save(ltcApplication);
+        
+        // Handle attachments
+        if (attachments != null && !attachments.isEmpty()) {
+            for (Map.Entry<String, MultipartFile> entry : attachments.entrySet()) {
+                String attachmentType = entry.getKey();
+                MultipartFile file = entry.getValue();
+                
+                if (file != null && !file.isEmpty()) {
+                    String filePath = fileStorageService.storeFile(file, "LTC", savedApplication.getId(), attachmentType);
+                    updateAttachmentField(savedApplication, attachmentType, filePath);
+                }
+            }
+            
+            savedApplication = ltcApplicationRepository.save(savedApplication);
+        }
+        
+        return savedApplication;
+    }
+    
+    public LTCApplication updateAttachment(Long applicationId, String attachmentType, MultipartFile file) throws IOException {
+        LTCApplication application = ltcApplicationRepository.findById(applicationId)
+            .orElseThrow(() -> new RuntimeException("LTC application not found"));
+        
+        // Delete old file if exists
+        String oldFilePath = getAttachmentPath(application, attachmentType);
+        if (oldFilePath != null) {
+            fileStorageService.deleteFile(oldFilePath);
+        }
+        
+        // Store new file
+        String newFilePath = fileStorageService.storeFile(file, "LTC", applicationId, attachmentType);
+        updateAttachmentField(application, attachmentType, newFilePath);
+        
+        return ltcApplicationRepository.save(application);
+    }
+    
+    public Map<String, String> getAttachments(Long applicationId) {
+        LTCApplication application = ltcApplicationRepository.findById(applicationId)
+            .orElseThrow(() -> new RuntimeException("LTC application not found"));
+        
+        Map<String, String> attachments = new HashMap<>();
+        
+        if (application.getTravelTicket() != null) {
+            attachments.put("travelTicket", application.getTravelTicket());
+        }
+        if (application.getHotelReceipt() != null) {
+            attachments.put("hotelReceipt", application.getHotelReceipt());
+        }
+        if (application.getExpenseVoucher() != null) {
+            attachments.put("expenseVoucher", application.getExpenseVoucher());
+        }
+        if (application.getTravelCertificate() != null) {
+            attachments.put("travelCertificate", application.getTravelCertificate());
+        }
+        
+        return attachments;
+    }
+    
+    private void updateAttachmentField(LTCApplication application, String attachmentType, String filePath) {
+        switch (attachmentType.toLowerCase()) {
+            case "travelticket":
+            case "travel_ticket":
+                application.setTravelTicket(filePath);
+                break;
+            case "hotelreceipt":
+            case "hotel_receipt":
+                application.setHotelReceipt(filePath);
+                break;
+            case "expensevoucher":
+            case "expense_voucher":
+                application.setExpenseVoucher(filePath);
+                break;
+            case "travelcertificate":
+            case "travel_certificate":
+                application.setTravelCertificate(filePath);
+                break;
+            default:
+                throw new IllegalArgumentException("Unknown attachment type: " + attachmentType);
+        }
+    }
+    
+    private String getAttachmentPath(LTCApplication application, String attachmentType) {
+        switch (attachmentType.toLowerCase()) {
+            case "travelticket":
+            case "travel_ticket":
+                return application.getTravelTicket();
+            case "hotelreceipt":
+            case "hotel_receipt":
+                return application.getHotelReceipt();
+            case "expensevoucher":
+            case "expense_voucher":
+                return application.getExpenseVoucher();
+            case "travelcertificate":
+            case "travel_certificate":
+                return application.getTravelCertificate();
+            default:
+                return null;
+        }
+    }
+    
+    // Other service methods...
+}
+```
+
+## Controllers
+
+### 1. Leave Application Controller
+```java
+package com.example.auth.controller;
+
+import com.example.auth.dto.MessageResponse;
+import com.example.auth.entity.LeaveApplication;
+import com.example.auth.service.LeaveApplicationService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/leave")
+@CrossOrigin(origins = "*", maxAge = 3600)
+public class LeaveApplicationController {
+    
+    @Autowired
+    private LeaveApplicationService leaveApplicationService;
+    
+    @PostMapping("/apply")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> applyLeave(
+            @ModelAttribute LeaveApplication leaveApplication,
+            @RequestParam(value = "medicalCertificate", required = false) MultipartFile medicalCertificate,
+            @RequestParam(value = "supportingDocument", required = false) MultipartFile supportingDocument,
+            @RequestParam(value = "additionalAttachment", required = false) MultipartFile additionalAttachment) {
+        
+        try {
+            Map<String, MultipartFile> attachments = new HashMap<>();
+            
+            if (medicalCertificate != null && !medicalCertificate.isEmpty()) {
+                attachments.put("medicalCertificate", medicalCertificate);
+            }
+            if (supportingDocument != null && !supportingDocument.isEmpty()) {
+                attachments.put("supportingDocument", supportingDocument);
+            }
+            if (additionalAttachment != null && !additionalAttachment.isEmpty()) {
+                attachments.put("additionalAttachment", additionalAttachment);
+            }
+            
+            LeaveApplication savedApplication = leaveApplicationService.saveLeaveApplicationWithAttachments(leaveApplication, attachments);
+            
+            return ResponseEntity.ok(new MessageResponse("Leave application submitted successfully", "success", savedApplication));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Failed to submit leave application: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @PostMapping("/{id}/attachment/{attachmentType}")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> updateAttachment(
+            @PathVariable Long id,
+            @PathVariable String attachmentType,
+            @RequestParam("file") MultipartFile file) {
+        
+        try {
+            LeaveApplication updatedApplication = leaveApplicationService.updateAttachment(id, attachmentType, file);
+            return ResponseEntity.ok(new MessageResponse("Attachment updated successfully", "success", updatedApplication));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Failed to update attachment: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @DeleteMapping("/{id}/attachment/{attachmentType}")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> deleteAttachment(
+            @PathVariable Long id,
+            @PathVariable String attachmentType) {
+        
+        try {
+            leaveApplicationService.deleteAttachment(id, attachmentType);
+            return ResponseEntity.ok(new MessageResponse("Attachment deleted successfully", "success"));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Failed to delete attachment: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @GetMapping("/{id}/attachment/{attachmentType}/download")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<ByteArrayResource> downloadAttachment(
+            @PathVariable Long id,
+            @PathVariable String attachmentType) {
+        
+        try {
+            byte[] fileData = leaveApplicationService.downloadAttachment(id, attachmentType);
+            ByteArrayResource resource = new ByteArrayResource(fileData);
+            
+            return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + attachmentType + "_" + id + ".pdf\"")
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .contentLength(fileData.length)
+                .body(resource);
+                
+        } catch (Exception e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+    
+    @GetMapping("/{id}/attachments")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> getAttachments(@PathVariable Long id) {
+        
+        try {
+            Map<String, String> attachments = leaveApplicationService.getAttachments(id);
+            return ResponseEntity.ok(new MessageResponse("Attachments retrieved successfully", "success", attachments));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Failed to retrieve attachments: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @GetMapping("/{id}")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> getLeaveApplication(@PathVariable Long id) {
+        
+        try {
+            LeaveApplication leaveApplication = leaveApplicationService.getLeaveApplication(id);
+            return ResponseEntity.ok(new MessageResponse("Leave application retrieved", "success", leaveApplication));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Failed to retrieve leave application: " + e.getMessage(), "error"));
+        }
+    }
+}
+```
+
+## Repository Interfaces
+
+```java
+package com.example.auth.repository;
+
+import com.example.auth.entity.LeaveApplication;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public interface LeaveApplicationRepository extends JpaRepository<LeaveApplication, Long> {
+    
+    List<LeaveApplication> findByEmpId(Long empId);
+    
+    List<LeaveApplication> findByStatus(String status);
+    
+    @Query("SELECT la FROM LeaveApplication la WHERE la.empId = :empId AND la.status = :status")
+    List<LeaveApplication> findByEmpIdAndStatus(@Param("empId") Long empId, @Param("status") String status);
+}
+
+// Similar repositories for LTCApplicationRepository and TADAApplicationRepository
+```
+
+## Configuration
+
+### application.properties
+```properties
+# File upload configuration
+spring.servlet.multipart.max-file-size=10MB
+spring.servlet.multipart.max-request-size=50MB
+
+# Custom file storage properties
+app.file.upload-dir=/var/fileserver/uploads
+app.file.max-file-size=10485760
+app.file.allowed-types=pdf,doc,docx,jpg,jpeg,png,gif,txt
+```
+
+## Usage Examples
+
+### 1. Submit Leave Application with Attachments
+```bash
+curl -X POST http://localhost:8080/api/leave/apply \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -F "empId=1" \
+  -F "leaveType=SICK_LEAVE" \
+  -F "startDate=2024-09-01" \
+  -F "endDate=2024-09-03" \
+  -F "reason=Medical treatment" \
+  -F "medicalCertificate=@medical_cert.pdf" \
+  -F "supportingDocument=@doctor_note.pdf"
+```
+
+### 2. Update Specific Attachment
+```bash
+curl -X POST http://localhost:8080/api/leave/123/attachment/medicalCertificate \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -F "file=@updated_medical_cert.pdf"
+```
+
+### 3. Download Attachment
+```bash
+curl -X GET http://localhost:8080/api/leave/123/attachment/medicalCertificate/download \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  --output medical_certificate.pdf
+```
+
+### 4. Get All Attachments
+```bash
+curl -X GET http://localhost:8080/api/leave/123/attachments \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+## Benefits of This Approach
+
+1. **Direct Column Mapping**: Each attachment field directly mapped to database column
+2. **Module-Specific Logic**: Each module can have its own specific attachment types
+3. **Simple Database Structure**: No additional junction tables needed
+4. **File Server Storage**: Files stored on file server with paths in database
+5. **Individual File Operations**: Upload, update, delete files independently
+6. **Type Safety**: Specific attachment types defined per module
+7. **Audit Trail**: File paths stored directly with application data
+8. **Performance**: Direct column access without joins
+9. **Flexibility**: Easy to add new attachment types per module
+10. **Security**: Role-based access control for all file operations
+
+This approach provides a clean, efficient way to handle multiple attachments while keeping file paths in the respective module tables and storing actual files on a file server.

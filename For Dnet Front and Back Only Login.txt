@@ -6588,3 +6588,1311 @@ curl -X GET http://localhost:8080/api/leave/123/attachments \
 10. **Security**: Role-based access control for all file operations
 
 This approach provides a clean, efficient way to handle multiple attachments while keeping file paths in the respective module tables and storing actual files on a file server.
+
+=======================================================================================
+
+
+
+# One-to-Many Relationship Example: Employee and Dependents with File Attachments
+
+Here's a complete example showing a 1-to-many relationship between Employee and their Dependents, with file attachment support and full CRUD operations:
+
+## Database Schema
+
+```sql
+-- Employee table (One side)
+CREATE TABLE employees (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    emp_code VARCHAR(20) UNIQUE NOT NULL,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    phone VARCHAR(15),
+    department VARCHAR(50),
+    designation VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Dependents table (Many side)
+CREATE TABLE dependents (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    employee_id BIGINT NOT NULL,  -- Foreign key to employees
+    name VARCHAR(100) NOT NULL,
+    relationship VARCHAR(20) NOT NULL,  -- 'SPOUSE', 'CHILD', 'PARENT'
+    date_of_birth DATE,
+    gender VARCHAR(10),
+    is_nominee BOOLEAN DEFAULT FALSE,
+    
+    -- Attachment columns for dependent documents
+    birth_certificate VARCHAR(255),
+    photo VARCHAR(255),
+    identity_proof VARCHAR(255),
+    medical_certificate VARCHAR(255),
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+    INDEX idx_employee_dependents (employee_id)
+);
+```
+
+## Entity Classes
+
+### 1. Employee Entity (One Side)
+```java
+package com.example.auth.entity;
+
+import com.fasterxml.jackson.annotation.JsonManagedReference;
+import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
+@Entity
+@Table(name = "employees")
+public class Employee {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    
+    @Column(name = "emp_code", unique = true, nullable = false)
+    private String empCode;
+    
+    @Column(name = "first_name", nullable = false)
+    private String firstName;
+    
+    @Column(name = "last_name", nullable = false)
+    private String lastName;
+    
+    @Column(name = "email", unique = true, nullable = false)
+    private String email;
+    
+    private String phone;
+    private String department;
+    private String designation;
+    
+    @CreationTimestamp
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+    
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+    
+    // One-to-Many relationship with Dependents
+    @OneToMany(mappedBy = "employee", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+    @JsonManagedReference
+    private List<Dependent> dependents = new ArrayList<>();
+    
+    // Constructors
+    public Employee() {}
+    
+    public Employee(String empCode, String firstName, String lastName, String email) {
+        this.empCode = empCode;
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.email = email;
+    }
+    
+    // Helper methods for managing dependents
+    public void addDependent(Dependent dependent) {
+        dependents.add(dependent);
+        dependent.setEmployee(this);
+    }
+    
+    public void removeDependent(Dependent dependent) {
+        dependents.remove(dependent);
+        dependent.setEmployee(null);
+    }
+    
+    public void updateDependents(List<Dependent> newDependents) {
+        // Clear existing dependents
+        this.dependents.clear();
+        
+        // Add new dependents
+        if (newDependents != null) {
+            for (Dependent dependent : newDependents) {
+                this.addDependent(dependent);
+            }
+        }
+    }
+    
+    // Getters and Setters
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    
+    public String getEmpCode() { return empCode; }
+    public void setEmpCode(String empCode) { this.empCode = empCode; }
+    
+    public String getFirstName() { return firstName; }
+    public void setFirstName(String firstName) { this.firstName = firstName; }
+    
+    public String getLastName() { return lastName; }
+    public void setLastName(String lastName) { this.lastName = lastName; }
+    
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+    
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
+    
+    public String getDepartment() { return department; }
+    public void setDepartment(String department) { this.department = department; }
+    
+    public String getDesignation() { return designation; }
+    public void setDesignation(String designation) { this.designation = designation; }
+    
+    public List<Dependent> getDependents() { return dependents; }
+    public void setDependents(List<Dependent> dependents) { this.dependents = dependents; }
+    
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    
+    @Override
+    public String toString() {
+        return "Employee{" +
+                "id=" + id +
+                ", empCode='" + empCode + '\'' +
+                ", firstName='" + firstName + '\'' +
+                ", lastName='" + lastName + '\'' +
+                ", email='" + email + '\'' +
+                '}';
+    }
+}
+```
+
+### 2. Dependent Entity (Many Side)
+```java
+package com.example.auth.entity;
+
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "dependents")
+public class Dependent {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    
+    @Column(name = "name", nullable = false)
+    private String name;
+    
+    @Enumerated(EnumType.STRING)
+    @Column(name = "relationship", nullable = false)
+    private RelationshipType relationship;
+    
+    @Column(name = "date_of_birth")
+    private LocalDate dateOfBirth;
+    
+    @Enumerated(EnumType.STRING)
+    private Gender gender;
+    
+    @Column(name = "is_nominee")
+    private Boolean isNominee = false;
+    
+    // Attachment columns
+    @Column(name = "birth_certificate")
+    private String birthCertificate;
+    
+    @Column(name = "photo")
+    private String photo;
+    
+    @Column(name = "identity_proof")
+    private String identityProof;
+    
+    @Column(name = "medical_certificate")
+    private String medicalCertificate;
+    
+    @CreationTimestamp
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+    
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+    
+    // Many-to-One relationship with Employee
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "employee_id", nullable = false)
+    @JsonBackReference
+    private Employee employee;
+    
+    // Constructors
+    public Dependent() {}
+    
+    public Dependent(String name, RelationshipType relationship) {
+        this.name = name;
+        this.relationship = relationship;
+    }
+    
+    public Dependent(String name, RelationshipType relationship, LocalDate dateOfBirth, Gender gender) {
+        this.name = name;
+        this.relationship = relationship;
+        this.dateOfBirth = dateOfBirth;
+        this.gender = gender;
+    }
+    
+    // Getters and Setters
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    
+    public RelationshipType getRelationship() { return relationship; }
+    public void setRelationship(RelationshipType relationship) { this.relationship = relationship; }
+    
+    public LocalDate getDateOfBirth() { return dateOfBirth; }
+    public void setDateOfBirth(LocalDate dateOfBirth) { this.dateOfBirth = dateOfBirth; }
+    
+    public Gender getGender() { return gender; }
+    public void setGender(Gender gender) { this.gender = gender; }
+    
+    public Boolean getIsNominee() { return isNominee; }
+    public void setIsNominee(Boolean isNominee) { this.isNominee = isNominee; }
+    
+    public String getBirthCertificate() { return birthCertificate; }
+    public void setBirthCertificate(String birthCertificate) { this.birthCertificate = birthCertificate; }
+    
+    public String getPhoto() { return photo; }
+    public void setPhoto(String photo) { this.photo = photo; }
+    
+    public String getIdentityProof() { return identityProof; }
+    public void setIdentityProof(String identityProof) { this.identityProof = identityProof; }
+    
+    public String getMedicalCertificate() { return medicalCertificate; }
+    public void setMedicalCertificate(String medicalCertificate) { this.medicalCertificate = medicalCertificate; }
+    
+    public Employee getEmployee() { return employee; }
+    public void setEmployee(Employee employee) { this.employee = employee; }
+    
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    
+    @Override
+    public String toString() {
+        return "Dependent{" +
+                "id=" + id +
+                ", name='" + name + '\'' +
+                ", relationship=" + relationship +
+                ", dateOfBirth=" + dateOfBirth +
+                '}';
+    }
+}
+```
+
+### 3. Enums
+```java
+package com.example.auth.entity;
+
+public enum RelationshipType {
+    SPOUSE("Spouse"),
+    CHILD("Child"),
+    PARENT("Parent"),
+    FATHER("Father"),
+    MOTHER("Mother"),
+    BROTHER("Brother"),
+    SISTER("Sister");
+    
+    private final String displayName;
+    
+    RelationshipType(String displayName) {
+        this.displayName = displayName;
+    }
+    
+    public String getDisplayName() {
+        return displayName;
+    }
+}
+
+public enum Gender {
+    MALE("Male"),
+    FEMALE("Female"),
+    OTHER("Other");
+    
+    private final String displayName;
+    
+    Gender(String displayName) {
+        this.displayName = displayName;
+    }
+    
+    public String getDisplayName() {
+        return displayName;
+    }
+}
+```
+
+## Repository Interfaces
+
+### 1. Employee Repository
+```java
+package com.example.auth.repository;
+
+import com.example.auth.entity.Employee;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface EmployeeRepository extends JpaRepository<Employee, Long> {
+    
+    Optional<Employee> findByEmpCode(String empCode);
+    
+    Optional<Employee> findByEmail(String email);
+    
+    List<Employee> findByDepartment(String department);
+    
+    List<Employee> findByDesignation(String designation);
+    
+    @Query("SELECT e FROM Employee e LEFT JOIN FETCH e.dependents WHERE e.id = :id")
+    Optional<Employee> findByIdWithDependents(@Param("id") Long id);
+    
+    @Query("SELECT e FROM Employee e LEFT JOIN FETCH e.dependents WHERE e.empCode = :empCode")
+    Optional<Employee> findByEmpCodeWithDependents(@Param("empCode") String empCode);
+    
+    Boolean existsByEmpCode(String empCode);
+    
+    Boolean existsByEmail(String email);
+}
+```
+
+### 2. Dependent Repository
+```java
+package com.example.auth.repository;
+
+import com.example.auth.entity.Dependent;
+import com.example.auth.entity.RelationshipType;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public interface DependentRepository extends JpaRepository<Dependent, Long> {
+    
+    List<Dependent> findByEmployeeId(Long employeeId);
+    
+    List<Dependent> findByEmployeeIdAndRelationship(Long employeeId, RelationshipType relationship);
+    
+    List<Dependent> findByEmployeeIdAndIsNominee(Long employeeId, Boolean isNominee);
+    
+    @Query("SELECT COUNT(d) FROM Dependent d WHERE d.employee.id = :employeeId")
+    Long countByEmployeeId(@Param("employeeId") Long employeeId);
+    
+    @Query("SELECT d FROM Dependent d WHERE d.employee.id = :employeeId AND d.relationship = :relationship")
+    List<Dependent> findDependentsByEmployeeAndRelationship(@Param("employeeId") Long employeeId, 
+                                                           @Param("relationship") RelationshipType relationship);
+    
+    void deleteByEmployeeId(Long employeeId);
+}
+```
+
+## Service Classes
+
+### 1. Employee Service
+```java
+package com.example.auth.service;
+
+import com.example.auth.entity.Employee;
+import com.example.auth.entity.Dependent;
+import com.example.auth.repository.EmployeeRepository;
+import com.example.auth.repository.DependentRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+
+@Service
+@Transactional
+public class EmployeeService {
+    
+    @Autowired
+    private EmployeeRepository employeeRepository;
+    
+    @Autowired
+    private DependentRepository dependentRepository;
+    
+    @Autowired
+    private FileStorageService fileStorageService;
+    
+    public Employee saveEmployee(Employee employee) {
+        return employeeRepository.save(employee);
+    }
+    
+    public Employee saveEmployeeWithDependents(Employee employee) {
+        // Save employee first
+        Employee savedEmployee = employeeRepository.save(employee);
+        
+        // Process dependents if present
+        if (employee.getDependents() != null && !employee.getDependents().isEmpty()) {
+            for (Dependent dependent : employee.getDependents()) {
+                dependent.setEmployee(savedEmployee);
+            }
+            dependentRepository.saveAll(employee.getDependents());
+        }
+        
+        return savedEmployee;
+    }
+    
+    public Employee updateEmployee(Long employeeId, Employee employeeDetails) {
+        Employee existingEmployee = employeeRepository.findById(employeeId)
+            .orElseThrow(() -> new RuntimeException("Employee not found with id: " + employeeId));
+        
+        // Update employee fields
+        existingEmployee.setFirstName(employeeDetails.getFirstName());
+        existingEmployee.setLastName(employeeDetails.getLastName());
+        existingEmployee.setEmail(employeeDetails.getEmail());
+        existingEmployee.setPhone(employeeDetails.getPhone());
+        existingEmployee.setDepartment(employeeDetails.getDepartment());
+        existingEmployee.setDesignation(employeeDetails.getDesignation());
+        
+        return employeeRepository.save(existingEmployee);
+    }
+    
+    public Employee updateEmployeeWithDependents(Long employeeId, Employee employeeDetails) {
+        Employee existingEmployee = employeeRepository.findByIdWithDependents(employeeId)
+            .orElseThrow(() -> new RuntimeException("Employee not found with id: " + employeeId));
+        
+        // Update employee fields
+        existingEmployee.setFirstName(employeeDetails.getFirstName());
+        existingEmployee.setLastName(employeeDetails.getLastName());
+        existingEmployee.setEmail(employeeDetails.getEmail());
+        existingEmployee.setPhone(employeeDetails.getPhone());
+        existingEmployee.setDepartment(employeeDetails.getDepartment());
+        existingEmployee.setDesignation(employeeDetails.getDesignation());
+        
+        // Update dependents
+        if (employeeDetails.getDependents() != null) {
+            // Remove existing dependents that are not in the new list
+            existingEmployee.getDependents().clear();
+            
+            // Add new dependents
+            for (Dependent newDependent : employeeDetails.getDependents()) {
+                newDependent.setEmployee(existingEmployee);
+                existingEmployee.addDependent(newDependent);
+            }
+        }
+        
+        return employeeRepository.save(existingEmployee);
+    }
+    
+    public Employee getEmployeeById(Long id) {
+        return employeeRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("Employee not found with id: " + id));
+    }
+    
+    public Employee getEmployeeWithDependents(Long id) {
+        return employeeRepository.findByIdWithDependents(id)
+            .orElseThrow(() -> new RuntimeException("Employee not found with id: " + id));
+    }
+    
+    public Employee getEmployeeByEmpCode(String empCode) {
+        return employeeRepository.findByEmpCode(empCode)
+            .orElseThrow(() -> new RuntimeException("Employee not found with empCode: " + empCode));
+    }
+    
+    public List<Employee> getAllEmployees() {
+        return employeeRepository.findAll();
+    }
+    
+    public List<Employee> getEmployeesByDepartment(String department) {
+        return employeeRepository.findByDepartment(department);
+    }
+    
+    public void deleteEmployee(Long id) {
+        if (!employeeRepository.existsById(id)) {
+            throw new RuntimeException("Employee not found with id: " + id);
+        }
+        employeeRepository.deleteById(id);
+    }
+    
+    public boolean existsByEmpCode(String empCode) {
+        return employeeRepository.existsByEmpCode(empCode);
+    }
+    
+    public boolean existsByEmail(String email) {
+        return employeeRepository.existsByEmail(email);
+    }
+}
+```
+
+### 2. Dependent Service
+```java
+package com.example.auth.service;
+
+import com.example.auth.entity.Dependent;
+import com.example.auth.entity.Employee;
+import com.example.auth.entity.RelationshipType;
+import com.example.auth.repository.DependentRepository;
+import com.example.auth.repository.EmployeeRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@Service
+@Transactional
+public class DependentService {
+    
+    @Autowired
+    private DependentRepository dependentRepository;
+    
+    @Autowired
+    private EmployeeRepository employeeRepository;
+    
+    @Autowired
+    private FileStorageService fileStorageService;
+    
+    public Dependent saveDependent(Long employeeId, Dependent dependent) {
+        Employee employee = employeeRepository.findById(employeeId)
+            .orElseThrow(() -> new RuntimeException("Employee not found with id: " + employeeId));
+        
+        dependent.setEmployee(employee);
+        return dependentRepository.save(dependent);
+    }
+    
+    public Dependent saveDependentWithAttachments(Long employeeId, Dependent dependent, 
+                                                Map<String, MultipartFile> attachments) throws IOException {
+        
+        // First save the dependent
+        Dependent savedDependent = saveDependent(employeeId, dependent);
+        
+        // Handle attachments
+        if (attachments != null && !attachments.isEmpty()) {
+            for (Map.Entry<String, MultipartFile> entry : attachments.entrySet()) {
+                String attachmentType = entry.getKey();
+                MultipartFile file = entry.getValue();
+                
+                if (file != null && !file.isEmpty()) {
+                    String filePath = fileStorageService.storeFile(file, "DEPENDENT", savedDependent.getId(), attachmentType);
+                    updateAttachmentField(savedDependent, attachmentType, filePath);
+                }
+            }
+            
+            savedDependent = dependentRepository.save(savedDependent);
+        }
+        
+        return savedDependent;
+    }
+    
+    public Dependent updateDependent(Long dependentId, Dependent dependentDetails) {
+        Dependent existingDependent = dependentRepository.findById(dependentId)
+            .orElseThrow(() -> new RuntimeException("Dependent not found with id: " + dependentId));
+        
+        // Update dependent fields
+        existingDependent.setName(dependentDetails.getName());
+        existingDependent.setRelationship(dependentDetails.getRelationship());
+        existingDependent.setDateOfBirth(dependentDetails.getDateOfBirth());
+        existingDependent.setGender(dependentDetails.getGender());
+        existingDependent.setIsNominee(dependentDetails.getIsNominee());
+        
+        return dependentRepository.save(existingDependent);
+    }
+    
+    public Dependent updateDependentWithAttachments(Long dependentId, Dependent dependentDetails,
+                                                   Map<String, MultipartFile> attachments) throws IOException {
+        
+        Dependent updatedDependent = updateDependent(dependentId, dependentDetails);
+        
+        // Handle attachment updates
+        if (attachments != null && !attachments.isEmpty()) {
+            for (Map.Entry<String, MultipartFile> entry : attachments.entrySet()) {
+                String attachmentType = entry.getKey();
+                MultipartFile file = entry.getValue();
+                
+                if (file != null && !file.isEmpty()) {
+                    // Delete old file if exists
+                    String oldFilePath = getAttachmentPath(updatedDependent, attachmentType);
+                    if (oldFilePath != null) {
+                        fileStorageService.deleteFile(oldFilePath);
+                    }
+                    
+                    // Store new file
+                    String filePath = fileStorageService.storeFile(file, "DEPENDENT", dependentId, attachmentType);
+                    updateAttachmentField(updatedDependent, attachmentType, filePath);
+                }
+            }
+            
+            updatedDependent = dependentRepository.save(updatedDependent);
+        }
+        
+        return updatedDependent;
+    }
+    
+    public Dependent updateDependentAttachment(Long dependentId, String attachmentType, MultipartFile file) throws IOException {
+        Dependent dependent = dependentRepository.findById(dependentId)
+            .orElseThrow(() -> new RuntimeException("Dependent not found with id: " + dependentId));
+        
+        // Delete old file if exists
+        String oldFilePath = getAttachmentPath(dependent, attachmentType);
+        if (oldFilePath != null) {
+            fileStorageService.deleteFile(oldFilePath);
+        }
+        
+        // Store new file
+        String newFilePath = fileStorageService.storeFile(file, "DEPENDENT", dependentId, attachmentType);
+        updateAttachmentField(dependent, attachmentType, newFilePath);
+        
+        return dependentRepository.save(dependent);
+    }
+    
+    public void deleteDependentAttachment(Long dependentId, String attachmentType) throws IOException {
+        Dependent dependent = dependentRepository.findById(dependentId)
+            .orElseThrow(() -> new RuntimeException("Dependent not found with id: " + dependentId));
+        
+        String filePath = getAttachmentPath(dependent, attachmentType);
+        if (filePath != null) {
+            fileStorageService.deleteFile(filePath);
+            updateAttachmentField(dependent, attachmentType, null);
+            dependentRepository.save(dependent);
+        }
+    }
+    
+    public byte[] downloadDependentAttachment(Long dependentId, String attachmentType) throws IOException {
+        Dependent dependent = dependentRepository.findById(dependentId)
+            .orElseThrow(() -> new RuntimeException("Dependent not found with id: " + dependentId));
+        
+        String filePath = getAttachmentPath(dependent, attachmentType);
+        if (filePath == null) {
+            throw new RuntimeException("Attachment not found");
+        }
+        
+        return fileStorageService.loadFile(filePath);
+    }
+    
+    public List<Dependent> getDependentsByEmployeeId(Long employeeId) {
+        return dependentRepository.findByEmployeeId(employeeId);
+    }
+    
+    public List<Dependent> getDependentsByEmployeeAndRelationship(Long employeeId, RelationshipType relationship) {
+        return dependentRepository.findByEmployeeIdAndRelationship(employeeId, relationship);
+    }
+    
+    public Dependent getDependentById(Long id) {
+        return dependentRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("Dependent not found with id: " + id));
+    }
+    
+    public void deleteDependent(Long id) {
+        Dependent dependent = dependentRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("Dependent not found with id: " + id));
+        
+        // Delete associated files
+        try {
+            if (dependent.getBirthCertificate() != null) {
+                fileStorageService.deleteFile(dependent.getBirthCertificate());
+            }
+            if (dependent.getPhoto() != null) {
+                fileStorageService.deleteFile(dependent.getPhoto());
+            }
+            if (dependent.getIdentityProof() != null) {
+                fileStorageService.deleteFile(dependent.getIdentityProof());
+            }
+            if (dependent.getMedicalCertificate() != null) {
+                fileStorageService.deleteFile(dependent.getMedicalCertificate());
+            }
+        } catch (IOException e) {
+            // Log error but continue with deletion
+            System.err.println("Error deleting files for dependent " + id + ": " + e.getMessage());
+        }
+        
+        dependentRepository.deleteById(id);
+    }
+    
+    public Long getDependentCountByEmployeeId(Long employeeId) {
+        return dependentRepository.countByEmployeeId(employeeId);
+    }
+    
+    public Map<String, String> getDependentAttachments(Long dependentId) {
+        Dependent dependent = dependentRepository.findById(dependentId)
+            .orElseThrow(() -> new RuntimeException("Dependent not found with id: " + dependentId));
+        
+        Map<String, String> attachments = new HashMap<>();
+        
+        if (dependent.getBirthCertificate() != null) {
+            attachments.put("birthCertificate", dependent.getBirthCertificate());
+        }
+        if (dependent.getPhoto() != null) {
+            attachments.put("photo", dependent.getPhoto());
+        }
+        if (dependent.getIdentityProof() != null) {
+            attachments.put("identityProof", dependent.getIdentityProof());
+        }
+        if (dependent.getMedicalCertificate() != null) {
+            attachments.put("medicalCertificate", dependent.getMedicalCertificate());
+        }
+        
+        return attachments;
+    }
+    
+    private void updateAttachmentField(Dependent dependent, String attachmentType, String filePath) {
+        switch (attachmentType.toLowerCase()) {
+            case "birthcertificate":
+            case "birth_certificate":
+                dependent.setBirthCertificate(filePath);
+                break;
+            case "photo":
+                dependent.setPhoto(filePath);
+                break;
+            case "identityproof":
+            case "identity_proof":
+                dependent.setIdentityProof(filePath);
+                break;
+            case "medicalcertificate":
+            case "medical_certificate":
+                dependent.setMedicalCertificate(filePath);
+                break;
+            default:
+                throw new IllegalArgumentException("Unknown attachment type: " + attachmentType);
+        }
+    }
+    
+    private String getAttachmentPath(Dependent dependent, String attachmentType) {
+        switch (attachmentType.toLowerCase()) {
+            case "birthcertificate":
+            case "birth_certificate":
+                return dependent.getBirthCertificate();
+            case "photo":
+                return dependent.getPhoto();
+            case "identityproof":
+            case "identity_proof":
+                return dependent.getIdentityProof();
+            case "medicalcertificate":
+            case "medical_certificate":
+                return dependent.getMedicalCertificate();
+            default:
+                return null;
+        }
+    }
+}
+```
+
+## Controllers
+
+### 1. Employee Controller
+```java
+package com.example.auth.controller;
+
+import com.example.auth.dto.MessageResponse;
+import com.example.auth.entity.Employee;
+import com.example.auth.service.EmployeeService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/employees")
+@CrossOrigin(origins = "*", maxAge = 3600)
+public class EmployeeController {
+    
+    @Autowired
+    private EmployeeService employeeService;
+    
+    @PostMapping
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> createEmployee(@RequestBody Employee employee) {
+        try {
+            // Check if empCode already exists
+            if (employeeService.existsByEmpCode(employee.getEmpCode())) {
+                return ResponseEntity.badRequest()
+                    .body(new MessageResponse("Employee code already exists", "error"));
+            }
+            
+            // Check if email already exists
+            if (employeeService.existsByEmail(employee.getEmail())) {
+                return ResponseEntity.badRequest()
+                    .body(new MessageResponse("Email already exists", "error"));
+            }
+            
+            Employee savedEmployee = employeeService.saveEmployeeWithDependents(employee);
+            return ResponseEntity.ok(new MessageResponse("Employee created successfully", "success", savedEmployee));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Failed to create employee: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @GetMapping
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> getAllEmployees() {
+        try {
+            List<Employee> employees = employeeService.getAllEmployees();
+            return ResponseEntity.ok(new MessageResponse("Employees retrieved successfully", "success", employees));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Failed to retrieve employees: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @GetMapping("/{id}")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> getEmployeeById(@PathVariable Long id) {
+        try {
+            Employee employee = employeeService.getEmployeeById(id);
+            return ResponseEntity.ok(new MessageResponse("Employee retrieved successfully", "success", employee));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Employee not found: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @GetMapping("/{id}/with-dependents")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> getEmployeeWithDependents(@PathVariable Long id) {
+        try {
+            Employee employee = employeeService.getEmployeeWithDependents(id);
+            return ResponseEntity.ok(new MessageResponse("Employee with dependents retrieved successfully", "success", employee));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Employee not found: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @GetMapping("/code/{empCode}")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> getEmployeeByEmpCode(@PathVariable String empCode) {
+        try {
+            Employee employee = employeeService.getEmployeeByEmpCode(empCode);
+            return ResponseEntity.ok(new MessageResponse("Employee retrieved successfully", "success", employee));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Employee not found: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @GetMapping("/department/{department}")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> getEmployeesByDepartment(@PathVariable String department) {
+        try {
+            List<Employee> employees = employeeService.getEmployeesByDepartment(department);
+            return ResponseEntity.ok(new MessageResponse("Employees retrieved successfully", "success", employees));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Failed to retrieve employees: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> updateEmployee(@PathVariable Long id, @RequestBody Employee employeeDetails) {
+        try {
+            Employee updatedEmployee = employeeService.updateEmployee(id, employeeDetails);
+            return ResponseEntity.ok(new MessageResponse("Employee updated successfully", "success", updatedEmployee));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Failed to update employee: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @PutMapping("/{id}/with-dependents")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> updateEmployeeWithDependents(@PathVariable Long id, @RequestBody Employee employeeDetails) {
+        try {
+            Employee updatedEmployee = employeeService.updateEmployeeWithDependents(id, employeeDetails);
+            return ResponseEntity.ok(new MessageResponse("Employee with dependents updated successfully", "success", updatedEmployee));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Failed to update employee: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> deleteEmployee(@PathVariable Long id) {
+        try {
+            employeeService.deleteEmployee(id);
+            return ResponseEntity.ok(new MessageResponse("Employee deleted successfully", "success"));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Failed to delete employee: " + e.getMessage(), "error"));
+        }
+    }
+}
+```
+
+### 2. Dependent Controller
+```java
+package com.example.auth.controller;
+
+import com.example.auth.dto.MessageResponse;
+import com.example.auth.entity.Dependent;
+import com.example.auth.entity.RelationshipType;
+import com.example.auth.service.DependentService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/dependents")
+@CrossOrigin(origins = "*", maxAge = 3600)
+public class DependentController {
+    
+    @Autowired
+    private DependentService dependentService;
+    
+    @PostMapping("/employee/{employeeId}")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> createDependent(
+            @PathVariable Long employeeId,
+            @ModelAttribute Dependent dependent,
+            @RequestParam(value = "birthCertificate", required = false) MultipartFile birthCertificate,
+            @RequestParam(value = "photo", required = false) MultipartFile photo,
+            @RequestParam(value = "identityProof", required = false) MultipartFile identityProof,
+            @RequestParam(value = "medicalCertificate", required = false) MultipartFile medicalCertificate) {
+        
+        try {
+            Map<String, MultipartFile> attachments = new HashMap<>();
+            
+            if (birthCertificate != null && !birthCertificate.isEmpty()) {
+                attachments.put("birthCertificate", birthCertificate);
+            }
+            if (photo != null && !photo.isEmpty()) {
+                attachments.put("photo", photo);
+            }
+            if (identityProof != null && !identityProof.isEmpty()) {
+                attachments.put("identityProof", identityProof);
+            }
+            if (medicalCertificate != null && !medicalCertificate.isEmpty()) {
+                attachments.put("medicalCertificate", medicalCertificate);
+            }
+            
+            Dependent savedDependent = dependentService.saveDependentWithAttachments(employeeId, dependent, attachments);
+            return ResponseEntity.ok(new MessageResponse("Dependent created successfully", "success", savedDependent));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Failed to create dependent: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @GetMapping("/employee/{employeeId}")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> getDependentsByEmployee(@PathVariable Long employeeId) {
+        try {
+            List<Dependent> dependents = dependentService.getDependentsByEmployeeId(employeeId);
+            return ResponseEntity.ok(new MessageResponse("Dependents retrieved successfully", "success", dependents));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Failed to retrieve dependents: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @GetMapping("/employee/{employeeId}/relationship/{relationship}")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> getDependentsByEmployeeAndRelationship(
+            @PathVariable Long employeeId, 
+            @PathVariable RelationshipType relationship) {
+        try {
+            List<Dependent> dependents = dependentService.getDependentsByEmployeeAndRelationship(employeeId, relationship);
+            return ResponseEntity.ok(new MessageResponse("Dependents retrieved successfully", "success", dependents));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Failed to retrieve dependents: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @GetMapping("/{id}")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> getDependentById(@PathVariable Long id) {
+        try {
+            Dependent dependent = dependentService.getDependentById(id);
+            return ResponseEntity.ok(new MessageResponse("Dependent retrieved successfully", "success", dependent));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Dependent not found: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> updateDependent(
+            @PathVariable Long id,
+            @ModelAttribute Dependent dependentDetails,
+            @RequestParam(value = "birthCertificate", required = false) MultipartFile birthCertificate,
+            @RequestParam(value = "photo", required = false) MultipartFile photo,
+            @RequestParam(value = "identityProof", required = false) MultipartFile identityProof,
+            @RequestParam(value = "medicalCertificate", required = false) MultipartFile medicalCertificate) {
+        
+        try {
+            Map<String, MultipartFile> attachments = new HashMap<>();
+            
+            if (birthCertificate != null && !birthCertificate.isEmpty()) {
+                attachments.put("birthCertificate", birthCertificate);
+            }
+            if (photo != null && !photo.isEmpty()) {
+                attachments.put("photo", photo);
+            }
+            if (identityProof != null && !identityProof.isEmpty()) {
+                attachments.put("identityProof", identityProof);
+            }
+            if (medicalCertificate != null && !medicalCertificate.isEmpty()) {
+                attachments.put("medicalCertificate", medicalCertificate);
+            }
+            
+            Dependent updatedDependent = dependentService.updateDependentWithAttachments(id, dependentDetails, attachments);
+            return ResponseEntity.ok(new MessageResponse("Dependent updated successfully", "success", updatedDependent));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Failed to update dependent: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @PostMapping("/{id}/attachment/{attachmentType}")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> updateDependentAttachment(
+            @PathVariable Long id,
+            @PathVariable String attachmentType,
+            @RequestParam("file") MultipartFile file) {
+        
+        try {
+            Dependent updatedDependent = dependentService.updateDependentAttachment(id, attachmentType, file);
+            return ResponseEntity.ok(new MessageResponse("Attachment updated successfully", "success", updatedDependent));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Failed to update attachment: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @DeleteMapping("/{id}/attachment/{attachmentType}")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> deleteDependentAttachment(
+            @PathVariable Long id,
+            @PathVariable String attachmentType) {
+        
+        try {
+            dependentService.deleteDependentAttachment(id, attachmentType);
+            return ResponseEntity.ok(new MessageResponse("Attachment deleted successfully", "success"));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Failed to delete attachment: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @GetMapping("/{id}/attachment/{attachmentType}/download")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<ByteArrayResource> downloadDependentAttachment(
+            @PathVariable Long id,
+            @PathVariable String attachmentType) {
+        
+        try {
+            byte[] fileData = dependentService.downloadDependentAttachment(id, attachmentType);
+            ByteArrayResource resource = new ByteArrayResource(fileData);
+            
+            return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, 
+                       "attachment; filename=\"" + attachmentType + "_" + id + ".pdf\"")
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .contentLength(fileData.length)
+                .body(resource);
+                
+        } catch (Exception e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+    
+    @GetMapping("/{id}/attachments")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> getDependentAttachments(@PathVariable Long id) {
+        try {
+            Map<String, String> attachments = dependentService.getDependentAttachments(id);
+            return ResponseEntity.ok(new MessageResponse("Attachments retrieved successfully", "success", attachments));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Failed to retrieve attachments: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> deleteDependent(@PathVariable Long id) {
+        try {
+            dependentService.deleteDependent(id);
+            return ResponseEntity.ok(new MessageResponse("Dependent deleted successfully", "success"));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Failed to delete dependent: " + e.getMessage(), "error"));
+        }
+    }
+    
+    @GetMapping("/employee/{employeeId}/count")
+    @PreAuthorize("hasRole('TD') or hasRole('GD')")
+    public ResponseEntity<?> getDependentCount(@PathVariable Long employeeId) {
+        try {
+            Long count = dependentService.getDependentCountByEmployeeId(employeeId);
+            Map<String, Long> response = Map.of("count", count);
+            return ResponseEntity.ok(new MessageResponse("Dependent count retrieved", "success", response));
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(new MessageResponse("Failed to get dependent count: " + e.getMessage(), "error"));
+        }
+    }
+}
+```
+
+## Usage Examples
+
+### 1. Create Employee with Dependents
+```bash
+curl -X POST http://localhost:8080/api/employees \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "empCode": "EMP001",
+    "firstName": "John",
+    "lastName": "Doe", 
+    "email": "john.doe@example.com",
+    "phone": "1234567890",
+    "department": "IT",
+    "designation": "Software Engineer",
+    "dependents": [
+      {
+        "name": "Jane Doe",
+        "relationship": "SPOUSE",
+        "dateOfBirth": "1990-05-15",
+        "gender": "FEMALE",
+        "isNominee": true
+      },
+      {
+        "name": "Johnny Doe",
+        "relationship": "CHILD", 
+        "dateOfBirth": "2015-03-10",
+        "gender": "MALE"
+      }
+    ]
+  }'
+```
+
+### 2. Add Dependent with Attachments
+```bash
+curl -X POST http://localhost:8080/api/dependents/employee/1 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -F "name=Alice Doe" \
+  -F "relationship=CHILD" \
+  -F "dateOfBirth=2018-07-20" \
+  -F "gender=FEMALE" \
+  -F "birthCertificate=@birth_cert.pdf" \
+  -F "photo=@child_photo.jpg"
+```
+
+### 3. Update Employee with Dependents
+```bash
+curl -X PUT http://localhost:8080/api/employees/1/with-dependents \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "firstName": "John Updated",
+    "lastName": "Doe",
+    "email": "john.updated@example.com",
+    "phone": "0987654321",
+    "department": "IT",
+    "designation": "Senior Software Engineer",
+    "dependents": [
+      {
+        "id": 1,
+        "name": "Jane Updated",
+        "relationship": "SPOUSE",
+        "dateOfBirth": "1990-05-15",
+        "gender": "FEMALE",
+        "isNominee": true
+      },
+      {
+        "name": "New Child",
+        "relationship": "CHILD",
+        "dateOfBirth": "2020-01-01",
+        "gender": "MALE"
+      }
+    ]
+  }'
+```
+
+### 4. Get Employee with Dependents
+```bash
+curl -X GET http://localhost:8080/api/employees/1/with-dependents \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+### 5. Update Dependent Attachment
+```bash
+curl -X POST http://localhost:8080/api/dependents/1/attachment/photo \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -F "file=@new_photo.jpg"
+```
+
+### 6. Download Dependent Attachment
+```bash
+curl -X GET http://localhost:8080/api/dependents/1/attachment/birthCertificate/download \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  --output birth_certificate.pdf
+```
+
+## Key Features
+
+1. **One-to-Many Relationship**: Employee can have multiple dependents
+2. **Cascade Operations**: Deleting employee removes all dependents
+3. **Orphan Removal**: Removing dependent from list deletes it from database  
+4. **File Attachments**: Each dependent can have multiple file attachments
+5. **Batch Updates**: Update employee and all dependents in single operation
+6. **Individual Updates**: Update specific dependent or attachment independently
+7. **Relationship Filtering**: Get dependents by specific relationship type
+8. **File Management**: Upload, update, delete, and download attachments
+9. **Transaction Management**: All operations are transactional
+10. **Validation**: Proper error handling and validation
+
+This example demonstrates a complete one-to-many relationship with file attachments, including all CRUD operations and file management capabilities.
+
